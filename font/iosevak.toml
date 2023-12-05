@@ -1,0 +1,59 @@
+[buildPlans.IosevkaCustom]
+  exportGlyphNames = false
+  family           = "Iosevka"
+  noCvSs           = true
+  serifs           = "sans"
+  spacing          = "normal"
+
+[buildPlans.IosevkaCustom.variants]
+  inherits = "ss08"
+
+[buildPlans.IosevkaCustom.variants.design]
+  brace                = "straight"
+  eight                = "two-circles"
+  lig-double-arrow-bar = "with-notch"
+  lig-hyphen-chain     = "with-notch"
+  lig-ltgteq           = "flat"
+  lig-plus-chain       = "with-notch"
+  lig-single-arrow-bar = "with-notch"
+  punctuation-dot      = "round"
+  zero                 = "slashed"
+
+[buildPlans.IosevkaCustom.variants.italic]
+  brace                = "straight"
+  lig-double-arrow-bar = "with-notch"
+  lig-hyphen-chain     = "with-notch"
+  lig-ltgteq           = "flat"
+  lig-plus-chain       = "with-notch"
+  lig-single-arrow-bar = "with-notch"
+  zero                 = "slashed"
+
+[buildPlans.IosevkaCustom.ligations]
+  inherits = "swift"
+
+[buildPlans.IosevkaCustom.weights.Regular]
+  css   = 400
+  menu  = 400
+  shape = 400
+
+[buildPlans.IosevkaCustom.weights.SemiBold]
+  css   = 600
+  menu  = 600
+  shape = 600
+
+[buildPlans.IosevkaCustom.widths.Normal]
+  css   = "normal"
+  menu  = 5
+  shape = 500
+
+[buildPlans.IosevkaCustom.slopes.Upright]
+  angle = 0
+  css   = "normal"
+  menu  = "upright"
+  shape = "upright"
+
+[buildPlans.IosevkaCustom.slopes.Italic]
+  angle = 9.4
+  css   = "italic"
+  menu  = "italic"
+  shape = "italic"
