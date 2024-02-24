@@ -7,6 +7,7 @@ xcode-select --install
 ## Install
 echo "Installing Brew..."
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+eval "$(/opt/homebrew/bin/brew shellenv)"
 brew analytics off
 
 ## Formulae
@@ -30,6 +31,7 @@ mas install 497799835 # Install XCode
 
 echo "Planting ssh keys..."
 cp -r $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/.ssh $HOME/.ssh
+chmod 600 $HOME/.ssh/id_ed25519
 
 echo "Changing macOS defaults..."
 
@@ -142,9 +144,16 @@ defaults write com.apple.SoftwareUpdate ScheduleFrequency -int 1
 # Disable smart quotes
 defaults write NSGlobalDomain NSAutomaticQuoteSubstitutionEnabled -bool false
 
+# Do not close windows when closing an app
+defaults write -g NSQuitAlwaysKeepsWindows -bool true
+
+# iTerm
+defaults write com.googlecode.iterm2 PrefsCustomFolder -string "$HOME/.config/iterm2"
+defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
+
 echo "Planting Configuration Files..."
 git clone git@github.com:dempfi/config.git $HOME/temp
-cp -r "$HOME/temp/.config" "$HOME/.config"
+cp -r "$HOME/temp/.config" "$HOME"
 
 echo "Making Fish default shell..."
 sudo sh -c 'echo /opt/homebrew/bin/fish >> /etc/shells'
@@ -156,10 +165,7 @@ open "$HOME/temp/themes/ayu-mirage.itermcolors"
 
 # Installing Xcode themes
 THEME_DIRECTORY="$HOME/Library/Developer/Xcode/UserData/FontAndColorThemes"
-if [ ! -d "$THEME_DIRECTORY" ]
-then
-  mkdir "$THEME_DIRECTORY"
-fi
+mkdir -p "$THEME_DIRECTORY"
 cp "$HOME/temp/themes/Ayu Light.xccolortheme" "$THEME_DIRECTORY/Ayu Light.xccolortheme"
 cp "$HOME/temp/themes/Ayu Mirage.xccolortheme" "$THEME_DIRECTORY/Ayu Mirage.xccolortheme"
 
@@ -168,4 +174,4 @@ cp -r $HOME/temp/font/ $HOME/Library/Fonts
 
 rm -rf $HOME/temp
 
-echo "Installation complete..."
+echo "Installation complete. Restart for values to take effect..."
