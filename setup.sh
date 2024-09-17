@@ -24,6 +24,7 @@ brew install --cask iterm2
 brew install --cask sketch
 brew install --cask zoom
 brew install --cask transmission
+brew install --cask visual-studio-code
 
 # Mac App Store Apps
 echo "Installing Mac App Store Apps..."
