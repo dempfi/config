@@ -164,11 +164,8 @@ chsh -s /opt/homebrew/bin/fish
 open "$HOME/temp/themes/ayu-light.itermcolors"
 open "$HOME/temp/themes/ayu-mirage.itermcolors"
 
-# Installing Xcode themes
-THEME_DIRECTORY="$HOME/Library/Developer/Xcode/UserData/FontAndColorThemes"
-mkdir -p "$THEME_DIRECTORY"
-cp "$HOME/temp/themes/Ayu Light.xccolortheme" "$THEME_DIRECTORY/Ayu Light.xccolortheme"
-cp "$HOME/temp/themes/Ayu Mirage.xccolortheme" "$THEME_DIRECTORY/Ayu Mirage.xccolortheme"
+# Installing Xcode themes and fonts from ayu-theme/ayu-xcode
+curl -fsSL https://raw.githubusercontent.com/ayu-theme/ayu-xcode/master/install.sh | sh -s -- --with-fonts
 
 # Installing Fonts
 cp -r $HOME/temp/font/ $HOME/Library/Fonts
