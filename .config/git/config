@@ -33,9 +33,9 @@
   # Show files ignored by git:
   ign = ls-files -o -i --exclude-standard
 [user]
-	name = Ike Ku
-	email = mail@dempfi.com
 	name = Ike Kurghinyan
+	email = mail@dempfi.com
+	useConfigOnly = true
 [push]
 	default = simple
 [rerere]
@@ -44,3 +44,11 @@
 	program = gpg
 [commit]
 	gpgsign = false
+[includeIf "gitdir:~/Developer/toptal/"]
+	path = ~/.config/git/toptal.config
+[url "git@github-toptal:toptal/"]
+	insteadOf = git@github.com:toptal/
+	insteadOf = https://github.com/toptal/
+[url "git@github-toptal:ikekurghinyan/"]
+	insteadOf = git@github.com:ikekurghinyan/
+	insteadOf = https://github.com/ikekurghinyan/
