@@ -18,6 +18,12 @@ brew install asdf
 brew install MonitorControl
 brew install swiftformat
 
+## Agent CLIs and RTK integration
+echo "Installing Agent CLIs..."
+brew install --cask claude-code
+brew install --cask codex
+brew install rtk
+
 ## Casks
 echo "Installing Brew Casks..."
 brew install --cask iterm2
@@ -155,6 +161,29 @@ defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
 echo "Planting Configuration Files..."
 git clone git@github.com:dempfi/config.git $HOME/temp
 cp -r "$HOME/temp/.config" "$HOME"
+mkdir -p "$HOME/.claude" "$HOME/.codex"
+cp "$HOME/temp/.claude/CLAUDE.md" "$HOME/temp/.claude/RTK.md" "$HOME/.claude/"
+cp "$HOME/temp/.codex/AGENTS.md" "$HOME/temp/.codex/RTK.md" "$HOME/.codex/"
+
+echo "Configuring Serena..."
+mkdir -p "$HOME/.serena"
+SERENA_CONFIG_FILE="$HOME/.serena/serena_config.yml"
+if [ -f "$SERENA_CONFIG_FILE" ]; then
+  if grep -q '^web_dashboard_open_on_launch:' "$SERENA_CONFIG_FILE"; then
+    sed -i '' 's/^web_dashboard_open_on_launch:.*/web_dashboard_open_on_launch: false/' "$SERENA_CONFIG_FILE"
+  else
+    printf '\nweb_dashboard_open_on_launch: false\n' >> "$SERENA_CONFIG_FILE"
+  fi
+else
+  cp "$HOME/temp/serena/serena_config.yml" "$SERENA_CONFIG_FILE"
+fi
+
+echo "Configuring RTK..."
+# Keep Claude's settings local: the official initializer adds only the RTK hook.
+rtk init --global --hook-only --auto-patch
+# Codex is configured by the tracked ~/.codex/AGENTS.md and RTK.md files above.
+rtk telemetry disable
+rtk verify
 
 echo "Making Fish default shell..."
 sudo sh -c 'echo /opt/homebrew/bin/fish >> /etc/shells'

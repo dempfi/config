@@ -1,0 +1,3 @@
+# Serena fills in its remaining defaults on first load.
+web_dashboard_open_on_launch: false
+projects: []

@@ -1,1 +1,4 @@
 .DS_Store
+/.serena/
+.config/gh/hosts.yml
+.config/git/*.local.config

@@ -33,9 +33,9 @@
   # Show files ignored by git:
   ign = ls-files -o -i --exclude-standard
 [user]
-	name = Ike Ku
-	email = mail@dempfi.com
 	name = Ike Kurghinyan
+	email = mail@dempfi.com
+	useConfigOnly = true
 [push]
 	default = simple
 [rerere]
