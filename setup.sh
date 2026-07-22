@@ -162,7 +162,7 @@ echo "Planting Configuration Files..."
 git clone git@github.com:dempfi/config.git $HOME/temp
 cp -r "$HOME/temp/.config" "$HOME"
 mkdir -p "$HOME/.claude" "$HOME/.codex"
-cp "$HOME/temp/.claude/CLAUDE.md" "$HOME/temp/.claude/RTK.md" "$HOME/.claude/"
+cp "$HOME/temp/.claude/CLAUDE.md" "$HOME/temp/.claude/RTK.md" "$HOME/temp/.claude/statusline-command.sh" "$HOME/.claude/"
 cp "$HOME/temp/.codex/AGENTS.md" "$HOME/temp/.codex/RTK.md" "$HOME/.codex/"
 
 echo "Configuring Serena..."
@@ -184,6 +184,17 @@ rtk init --global --hook-only --auto-patch
 # Codex is configured by the tracked ~/.codex/AGENTS.md and RTK.md files above.
 rtk telemetry disable
 rtk verify
+
+echo "Wiring the weekly-usage status line into Claude settings..."
+# settings.json stays machine-local (holds secrets + the rtk hook), so re-apply the
+# statusLine block after rtk init rather than tracking the whole file. Points at the
+# statusline-command.sh copied above; jq ships with macOS (/usr/bin/jq).
+SETTINGS="$HOME/.claude/settings.json"
+[ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
+STATUSLINE_TMP="$(mktemp)"
+jq --arg cmd "bash $HOME/.claude/statusline-command.sh" \
+  '.statusLine = {type: "command", command: $cmd, refreshInterval: 5}' \
+  "$SETTINGS" > "$STATUSLINE_TMP" && mv "$STATUSLINE_TMP" "$SETTINGS"
 
 echo "Making Fish default shell..."
 sudo sh -c 'echo /opt/homebrew/bin/fish >> /etc/shells'
