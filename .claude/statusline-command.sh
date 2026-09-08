@@ -18,8 +18,6 @@ BOLD='\033[1m'
 # Repeat a (possibly multibyte) glyph n times — printf/tr can't, since they count bytes.
 bar_repeat() { local n=$1 ch=$2 out=''; while [ "$n" -gt 0 ]; do out="$out$ch"; n=$(( n - 1 )); done; printf '%s' "$out"; }
 
-# prompt_pwd-style abbreviation: parent segments -> first char, last segment kept full,
-# $HOME -> ~ (e.g. /Users/dempfi/Developer/paramour -> ~/D/paramour)
 abbreviate_path() {
   local path="$1" home="$HOME" prefix="" out="" seg i n
   local -a segs

@@ -1,5 +1,11 @@
 Never add "Co-Authored-By" lines to git commit messages or GitHub PR descriptions.
 
+Never use Playwright (`playwright-cli`, the Playwright MCP, or the Playwright plugin) for browser automation — use `agent-browser` instead.
+
+`agent-browser` shares one daemon across every agent and terminal on this machine. Each caller gets its own session, preset via `AGENT_BROWSER_SESSION` — never override it, and never run `close --all`, which kills the other callers' browsers too. Close your own with `agent-browser close`.
+
+Under Codex, Chrome cannot start inside the seatbelt sandbox, so `agent-browser` always runs escalated — approve it once with the prefix rule `["agent-browser"]`. Codex skips prefix-rule matching for any command segment containing `$(...)`, a `FOO=bar` prefix, redirection, or a glob, and re-prompts for it every time; write plain `agent-browser …` segments with literal flags. `&&` chains match per segment and are fine.
+
 ## How I work — engineering methodology
 
 These override default helpfulness instincts.
@@ -20,7 +26,11 @@ These override default helpfulness instincts.
 
 **Effort in t-shirt sizes** (XS–XL), never time units, everywhere effort comes up.
 
-**Comments explain the code, not your reasoning.** A code comment states what the code means or does that the code itself can't show — an invariant, a non-obvious constraint, a unit, a gotcha. It never narrates why you chose this approach, the alternatives you weighed, or the investigation that led there; that belongs in the commit message or PR description, not the source. Don't leak your reasoning into comments, and don't restate what the code already shows.
+**Don't write comments.** Write code that reads without them. What you were about to explain goes in the commit message or the PR description, not the source. Match the comment density of the file you're editing — which, in a file you are adding to, means adding none. Leave existing comments alone unless the code under them changed and made them wrong.
+
+**Docs carry intent; specs may carry mechanism; neither restates the code.** Three layers, and each belongs in exactly one place. **Intent** — what this is for, what it must guarantee, what it deliberately refuses to do, what breaks if you change it — is what documentation exists to hold, because it is the one thing the source cannot tell you. **Mechanism** — how the thing works, described conceptually — is legitimate in a spec or design doc. **Code artifacts** — function and symbol names, file paths, call order, signatures — belong in the source, never transcribed into prose: a doc that walks `a() → b() → c()` is a stale rename away from lying, and a reader learns more from the code it paraphrases. Anchor to modules and directories (and their READMEs), which rot slowly; never to a call chain, which rots on every refactor. Reference *data* the code cannot supply — external vocabularies, event taxonomies, config keys, price bands — is content, not restatement, and stays. When rewriting a doc toward intent, SOURCE the intent from the existing prose, module READMEs, or commit history; if it cannot be sourced, write a shorter honest doc rather than inventing a rationale.
+
+**Archaeology lives in git — not in the source, and not in the docs.** How something got this way is already recorded in commits, PRs and the issue tracker, so it must not be duplicated anywhere else: comments, test names, fixture headers, docstrings, specs, design docs, READMEs. Documentation states what is true NOW and why it must be — never what changed, when, what it replaced, or what was tried first. A doc written as a changelog decays into a list of claims a reader cannot tell apart from the current ones. That means **no** session/message/turn/commit ids, dates, ticket refs, "previously / used to / was tried / re-added / re-locked", A/B results, measurement transcripts (`4/6`, `n=4`, `~140 tok`, `measured 2026-…`), or before/after framing. State the behavior in the present tense and the constraint that makes it necessary — if a past failure is the reason a guard exists, describe **the failure the guard prevents**, not when it happened or where it was found. Keep a number only when the number *is* the constraint (a budget, threshold, price band, unit), never when it is the evidence. Write it so a reader who has never seen the git history loses nothing.
 
 ## Code search
 

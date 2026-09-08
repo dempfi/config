@@ -1,0 +1,27 @@
+{
+  "name": "svelte-lsp-marketplace",
+  "owner": {
+    "name": "local"
+  },
+  "plugins": [
+    {
+      "name": "svelte-lsp",
+      "description": "Svelte language server for code intelligence",
+      "version": "1.0.0",
+      "source": "./plugins/svelte-lsp",
+      "category": "development",
+      "strict": false,
+      "lspServers": {
+        "svelte": {
+          "command": "svelteserver",
+          "args": [
+            "--stdio"
+          ],
+          "extensionToLanguage": {
+            ".svelte": "svelte"
+          }
+        }
+      }
+    }
+  ]
+}
