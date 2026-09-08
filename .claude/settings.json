@@ -1,0 +1,241 @@
+{
+  "env": {
+    "AGENT_BROWSER_SESSION": "claude"
+  },
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npx tsc:*)",
+      "Bash(agent-browser:*)"
+    ],
+    "defaultMode": "auto"
+  },
+  "model": "opus",
+  "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "high"
+    },
+    "claude-fable-5": {
+      "effortLevel": "xhigh"
+    },
+    "claude-fable-5-1": {
+      "effortLevel": "high"
+    }
+  },
+  "skillOverrides": {
+    "brainstorming": "off"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "rtk hook claude"
+          }
+        ]
+      },
+      {
+        "matcher": "Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-first-guard.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-first-glob-guard.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-first-read-guard.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-pre-delegation.js"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/bash-grep-block.js"
+          },
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/no-bash-source-edits.cjs",
+            "timeout": 10,
+            "statusMessage": "Checking edit path"
+          },
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/no-blind-git-add.cjs",
+            "timeout": 10,
+            "statusMessage": "Checking staging scope"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/no-comments-guard.js",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/no-session-links.cjs",
+            "timeout": 10,
+            "statusMessage": "Checking attribution"
+          },
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/no-slack-posting.cjs",
+            "timeout": 10,
+            "statusMessage": "Checking Slack posting"
+          }
+        ]
+      },
+      {
+        "matcher": ".*[Ss]lack.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/no-slack-posting.cjs",
+            "timeout": 10,
+            "statusMessage": "Checking Slack posting"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "LSP|mcp__plugin_serena_serena__find_symbol|mcp__plugin_serena_serena__find_referencing_symbols|mcp__plugin_serena_serena__find_implementations|mcp__plugin_serena_serena__find_declaration|mcp__plugin_serena_serena__get_symbols_overview|mcp__plugin_serena_serena__get_diagnostics_for_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-usage-tracker.js"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "true",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-session-reset.js"
+          }
+        ]
+      }
+    ]
+  },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(npx vitest run:*)",
+      "Bash(npx svelte-check:*)"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(wrangler d1 execute:*--remote*)",
+      "Bash(wrangler secret put:*)"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash __HOME__/.claude/statusline-command.sh",
+    "refreshInterval": 5
+  },
+  "extraKnownMarketplaces": {
+    "cloudflare": {
+      "source": {
+        "source": "github",
+        "repo": "cloudflare/skills"
+      }
+    },
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    },
+    "marketingskills": {
+      "source": {
+        "source": "github",
+        "repo": "coreyhaines31/marketingskills"
+      }
+    },
+    "svelte-lsp-marketplace": {
+      "source": {
+        "source": "directory",
+        "path": "__HOME__/.claude/marketplaces/svelte-lsp"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "svelte-lsp@svelte-lsp-marketplace": true,
+    "swift-lsp@claude-plugins-official": false,
+    "serena@claude-plugins-official": false,
+    "playwright@claude-plugins-official": false,
+    "superpowers@claude-plugins-official": false,
+    "figma@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "posthog@claude-plugins-official": true,
+    "atlassian@claude-plugins-official": true,
+    "cloudflare@cloudflare": true,
+    "claude-hud@claude-hud": true
+  },
+  "autoUpdatesChannel": "latest",
+  "theme": "auto",
+  "tui": "fullscreen",
+  "editorMode": "normal",
+  "verbose": true,
+  "voiceEnabled": true,
+  "awaySummaryEnabled": false,
+  "switchModelsOnFlag": true,
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true,
+  "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true
+}
