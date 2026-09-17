@@ -55,7 +55,7 @@ run "svelte-ignore"          pass "$(j /x/a.svelte Edit s '<!-- svelte-ignore a1
 run "SPDX"                   pass "$(j /x/a.rs Edit s '// SPDX-License-Identifier: MIT')"
 run "prettier-ignore"        pass "$(j /x/a.ts Edit s '// prettier-ignore')"
 run "plain code"             pass "$(j /x/a.ts Edit s 'const windowSize = 12')"
-run "url in string"          pass "$(j /x/a.ts Edit s "const u = 'https://example.com'")"
+run "url in string"          pass "$(j /x/a.ts Edit s "const u = 'https://paramour.chat'")"
 run "markdown skipped"       pass "$(j /x/a.md Edit s '<!-- a doc note -->')"
 run "json skipped"           pass "$(j /x/a.json Edit s '// nope')"
 run "python docstring"       pass "$(j /x/a.py Edit s '\"\"\"Return the frame.\"\"\"')"

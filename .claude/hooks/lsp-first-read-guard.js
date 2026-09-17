@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
-const os = require('os');
-const crypto = require('crypto');
 const { buildWarmupInstructions, buildFileWarmupCall } = require('./lib/detect-lsp-provider');
+const state = require('./lib/lsp-state');
 
 /**
  * Build a copy-pasteable warmup call parametrized by the exact file the
@@ -19,40 +17,15 @@ function buildConcreteCall(filePath) {
   return `\nCONCRETE CALL FOR THIS FILE (works in any project):\n${call}\n`;
 }
 
-const STATE_DIR = path.join(os.homedir(), '.claude', 'state');
 const CODE_EXTENSIONS = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|vue|svelte|cpp|c|h|hpp|cs|rb|php|lua)$/i;
 const ALLOW_NON_CODE_EXT = /\.(md|txt|log|json|jsonc|yaml|yml|env|csv|toml|xml|sql|sh|css|scss|html|lock|ini|conf|cfg)$/i;
 const ALLOW_CONFIG_PATTERNS = /(\.config\.|tsconfig|next\.config|vite\.config|webpack\.config|rollup\.config|babel\.config|jest\.config|vitest\.config|tailwind\.config|postcss\.config|eslint|prettier|package\.json|pnpm-lock|yarn\.lock)/i;
 const ALLOW_PATH_PATTERNS = /(^|\/)(\.task|\.claude|\.git|node_modules|build|dist|out|public|scripts|docs?|knowledge-vault|supabase\/migrations|coverage|\.next|\.turbo|__tests__|__mocks__)(\/|$)/i;
 const ALLOW_TEST_PATTERNS = /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|py)$/i;
 
-const FLAG_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const FREE_READS = 2;
 const WARN_AT = 3;
 const REQUIRE_NAV_2_AT = 6;
-
-function getFlagPath() {
-  const cwd = process.cwd();
-  const hash = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 12);
-  return path.join(STATE_DIR, `lsp-ready-${hash}`);
-}
-
-function ensureStateDir() {
-  try { if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true }); } catch {}
-}
-
-function readFlag(fp) {
-  try {
-    if (!fs.existsSync(fp)) return null;
-    const d = JSON.parse(fs.readFileSync(fp, 'utf8'));
-    if (Date.now() - (d.timestamp || 0) > FLAG_EXPIRY_MS) return null;
-    return d;
-  } catch { return null; }
-}
-
-function writeFlag(fp, flag) {
-  try { ensureStateDir(); fs.writeFileSync(fp, JSON.stringify(flag)); } catch {}
-}
 
 function emitWarning(msg) { console.log(JSON.stringify({ systemMessage: msg })); }
 function emitBlock(msg) { process.stderr.write(msg); process.exit(2); }
@@ -75,8 +48,7 @@ process.stdin.on('end', () => {
   if (ALLOW_TEST_PATTERNS.test(filePath)) process.exit(0);
   if (!CODE_EXTENSIONS.test(filePath)) process.exit(0);
 
-  const flagPath = getFlagPath();
-  const flag = readFlag(flagPath);
+  const flag = state.readFlag(data);
 
   if (!flag || !flag.warmup_done) {
     const warmupLines = buildWarmupInstructions('  ').join('\n');
@@ -103,7 +75,7 @@ process.stdin.on('end', () => {
       flag.read_files = readFiles;
       flag.read_count = readFiles.length;
       flag.timestamp = Date.now();
-      writeFlag(flagPath, flag);
+      state.writeFlag(data, flag);
     }
     process.exit(0);
   }
@@ -113,7 +85,7 @@ process.stdin.on('end', () => {
     flag.read_files = readFiles;
     flag.read_count = readFiles.length;
     flag.timestamp = Date.now();
-    writeFlag(flagPath, flag);
+    state.writeFlag(data, flag);
     process.exit(0);
   }
 
@@ -128,7 +100,7 @@ process.stdin.on('end', () => {
     flag.read_files = readFiles;
     flag.read_count = readFiles.length;
     flag.timestamp = Date.now();
-    writeFlag(flagPath, flag);
+    state.writeFlag(data, flag);
     process.exit(0);
   }
 
@@ -156,6 +128,6 @@ process.stdin.on('end', () => {
   flag.read_files = readFiles;
   flag.read_count = readFiles.length;
   flag.timestamp = Date.now();
-  writeFlag(flagPath, flag);
+  state.writeFlag(data, flag);
   process.exit(0);
 });

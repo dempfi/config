@@ -1,0 +1,25 @@
+{
+  "name": "swift-lsp-quiet-marketplace",
+  "owner": {
+    "name": "local"
+  },
+  "plugins": [
+    {
+      "name": "swift-lsp-quiet",
+      "description": "Swift language server (SourceKit-LSP) for code navigation, without diagnostics pushed into context after edits",
+      "version": "1.0.0",
+      "source": "./plugins/swift-lsp-quiet",
+      "category": "development",
+      "strict": false,
+      "lspServers": {
+        "sourcekit-lsp": {
+          "command": "sourcekit-lsp",
+          "extensionToLanguage": {
+            ".swift": "swift"
+          },
+          "diagnostics": false
+        }
+      }
+    }
+  ]
+}

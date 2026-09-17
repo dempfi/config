@@ -12,28 +12,8 @@
  * Serena, ...) via ./lib/detect-lsp-provider.js — not hardcoded to cclsp.
  */
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const crypto = require('crypto');
 const { isLspProviderTool } = require('./lib/detect-lsp-provider');
-
-const STATE_DIR = path.join(os.homedir(), '.claude', 'state');
-
-function getFlagPath() {
-  const cwd = process.cwd();
-  const hash = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 12);
-  return path.join(STATE_DIR, `lsp-ready-${hash}`);
-}
-
-function readFlag(fp) {
-  try {
-    if (!fs.existsSync(fp)) return null;
-    const d = JSON.parse(fs.readFileSync(fp, 'utf8'));
-    if (Date.now() - (d.timestamp || 0) > 24 * 60 * 60 * 1000) return null;
-    return d;
-  } catch { return null; }
-}
+const state = require('./lib/lsp-state');
 
 // cclsp-specific upstream bug (ktnyt/cclsp#43). Serena has its own LSP
 // wrapper and doesn't hit this class of error — skip the hint for non-cclsp.
@@ -87,9 +67,7 @@ process.stdin.on('end', () => {
 
     if (isAnyError(resp)) process.exit(0);
 
-    if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true });
-    const flagPath = getFlagPath();
-    const existing = readFlag(flagPath) || {
+    const existing = state.readFlag(data) || {
       cwd: process.cwd(), warmup_done: false, nav_count: 0, read_count: 0, read_files: [],
     };
 
@@ -100,9 +78,10 @@ process.stdin.on('end', () => {
       existing.nav_count = (existing.nav_count || 0) + 1;
     }
 
+    if (state.isEmptyResult(resp)) existing.last_empty_at = Date.now();
     existing.timestamp = Date.now();
     existing.last_tool = toolName;
-    fs.writeFileSync(flagPath, JSON.stringify(existing));
+    state.writeFlag(data, existing);
   } catch {}
   process.exit(0);
 });

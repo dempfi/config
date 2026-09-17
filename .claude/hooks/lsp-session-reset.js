@@ -21,34 +21,20 @@
  */
 
 const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const crypto = require('crypto');
-
-const STATE_DIR = path.join(os.homedir(), '.claude', 'state');
-
-function getFlagPath(cwd) {
-  const hash = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 12);
-  return path.join(STATE_DIR, `lsp-ready-${hash}`);
-}
+const state = require('./lib/lsp-state');
 
 let raw = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', d => { raw += d; });
 process.stdin.on('end', () => {
-  let cwd = process.cwd();
+  let data = {};
   try {
-    const data = JSON.parse(raw || '{}');
-    if (data.cwd && typeof data.cwd === 'string') cwd = data.cwd;
-  } catch { /* ignore */ }
-
-  const flagPath = getFlagPath(cwd);
+    data = JSON.parse(raw || '{}');
+  } catch {}
 
   try {
-    if (fs.existsSync(flagPath)) {
-      fs.unlinkSync(flagPath);
-    }
-  } catch { /* silent: hook must never block session start */ }
+    fs.unlinkSync(state.flagPath(data));
+  } catch {}
 
   process.exit(0);
 });

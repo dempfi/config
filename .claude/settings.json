@@ -9,33 +9,20 @@
   },
   "permissions": {
     "allow": [
+      "Bash(npx eslint:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)",
       "Bash(gh repo:*)",
-      "Bash(npx eslint:*)",
+      "Bash(git push:*)",
+      "Read(/__HOME__/Developer/**)",
       "Bash(npx tsc:*)",
       "Bash(agent-browser:*)"
     ],
     "defaultMode": "auto"
   },
   "model": "opus",
-  "effortLevel": "high",
-  "modelSettings": {
-    "claude-opus-5": {
-      "effortLevel": "high"
-    },
-    "claude-fable-5": {
-      "effortLevel": "xhigh"
-    },
-    "claude-fable-5-1": {
-      "effortLevel": "high"
-    }
-  },
-  "skillOverrides": {
-    "brainstorming": "off"
-  },
+  "skillOverrides": {},
   "hooks": {
     "PreToolUse": [
       {
@@ -66,24 +53,6 @@
         ]
       },
       {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ~/.claude/hooks/lsp-first-read-guard.js"
-          }
-        ]
-      },
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ~/.claude/hooks/lsp-pre-delegation.js"
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -101,6 +70,28 @@
             "command": "node ~/.claude/hooks/no-blind-git-add.cjs",
             "timeout": 10,
             "statusMessage": "Checking staging scope"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-first-read-guard.js"
+          },
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/no-large-read.cjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-pre-delegation.js"
           }
         ]
       },
@@ -143,17 +134,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "LSP|mcp__plugin_serena_serena__find_symbol|mcp__plugin_serena_serena__find_referencing_symbols|mcp__plugin_serena_serena__find_implementations|mcp__plugin_serena_serena__find_declaration|mcp__plugin_serena_serena__get_symbols_overview|mcp__plugin_serena_serena__get_diagnostics_for_file",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ~/.claude/hooks/lsp-usage-tracker.js"
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "matcher": "true",
@@ -164,24 +144,29 @@
           }
         ]
       }
-    ]
-  },
-  "autoMode": {
-    "allow": [
-      "$defaults",
-      "Bash(npx vitest run:*)",
-      "Bash(npx svelte-check:*)"
     ],
-    "soft_deny": [
-      "$defaults",
-      "Bash(wrangler d1 execute:*--remote*)",
-      "Bash(wrangler secret put:*)"
+    "PostToolUse": [
+      {
+        "matcher": "LSP|mcp__plugin_serena_serena__find_symbol|mcp__plugin_serena_serena__find_referencing_symbols|mcp__plugin_serena_serena__find_implementations|mcp__plugin_serena_serena__find_declaration|mcp__plugin_serena_serena__get_symbols_overview|mcp__plugin_serena_serena__get_diagnostics_for_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/lsp-usage-tracker.js"
+          }
+        ]
+      }
     ]
   },
+  "bashOutputMaxChars": 10000,
   "statusLine": {
     "type": "command",
     "command": "bash __HOME__/.claude/statusline-command.sh",
     "refreshInterval": 5
+  },
+  "enabledPlugins": {
+    "swift-lsp-quiet@swift-lsp-quiet-marketplace": true,
+    "figma@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "cloudflare": {
@@ -190,10 +175,35 @@
         "repo": "cloudflare/skills"
       }
     },
-    "claude-hud": {
+    "svelte-lsp-marketplace": {
+      "source": {
+        "source": "directory",
+        "path": "__HOME__/.claude/marketplaces/svelte-lsp"
+      }
+    },
+    "swift-lsp-quiet-marketplace": {
+      "source": {
+        "source": "directory",
+        "path": "__HOME__/.claude/marketplaces/swift-lsp-quiet"
+      }
+    },
+    "claude-for-financial-services": {
       "source": {
         "source": "github",
-        "repo": "jarrodwatts/claude-hud"
+        "repo": "anthropics/financial-services"
+      }
+    },
+    "archik": {
+      "source": {
+        "source": "github",
+        "repo": "bacharSalleh/archik"
+      }
+    },
+    "sonar": {
+      "source": {
+        "source": "github",
+        "repo": "toptal/sonar-claude-plugin",
+        "ref": "claude-code-plugin"
       }
     },
     "marketingskills": {
@@ -201,41 +211,42 @@
         "source": "github",
         "repo": "coreyhaines31/marketingskills"
       }
-    },
-    "svelte-lsp-marketplace": {
-      "source": {
-        "source": "directory",
-        "path": "__HOME__/.claude/marketplaces/svelte-lsp"
-      }
     }
   },
-  "enabledPlugins": {
-    "typescript-lsp@claude-plugins-official": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "svelte-lsp@svelte-lsp-marketplace": true,
-    "swift-lsp@claude-plugins-official": false,
-    "serena@claude-plugins-official": false,
-    "playwright@claude-plugins-official": false,
-    "superpowers@claude-plugins-official": false,
-    "figma@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "posthog@claude-plugins-official": true,
-    "atlassian@claude-plugins-official": true,
-    "cloudflare@cloudflare": true,
-    "claude-hud@claude-hud": true
+  "effortLevel": "high",
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "high"
+    },
+    "claude-fable-5": {
+      "effortLevel": "high"
+    },
+    "claude-fable-5-1": {
+      "effortLevel": "high"
+    }
   },
+  "awaySummaryEnabled": false,
   "autoUpdatesChannel": "latest",
-  "theme": "auto",
   "tui": "fullscreen",
+  "autoMemoryEnabled": false,
+  "skipDangerousModePermissionPrompt": true,
+  "skipWorkflowUsageWarning": true,
+  "theme": "auto",
   "editorMode": "normal",
   "verbose": true,
-  "voiceEnabled": true,
-  "awaySummaryEnabled": false,
   "switchModelsOnFlag": true,
   "remoteControlAtStartup": true,
+  "crossSessionInbound": "accept",
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "skipDangerousModePermissionPrompt": true,
-  "skipWorkflowUsageWarning": true
+  "autoMode": {
+    "allow": [
+      "$defaults"
+    ],
+    "soft_deny": [
+      "$defaults"
+    ]
+  },
+  "voiceEnabled": true
 }
