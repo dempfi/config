@@ -1,3 +1,5 @@
+[core]
+  editor = code --wait
 [color]
   ui = auto
 [color "branch"]
@@ -44,11 +46,11 @@
 	program = gpg
 [commit]
 	gpgsign = false
+[credential "https://github.com"]
+	helper =
+	helper = !GH_CONFIG_DIR=$HOME/.config/gh /opt/homebrew/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !GH_CONFIG_DIR=$HOME/.config/gh /opt/homebrew/bin/gh auth git-credential
 [includeIf "gitdir:~/Developer/toptal/"]
 	path = ~/.config/git/toptal.config
-[url "git@github-toptal:toptal/"]
-	insteadOf = git@github.com:toptal/
-	insteadOf = https://github.com/toptal/
-[url "git@github-toptal:ikekurghinyan/"]
-	insteadOf = git@github.com:ikekurghinyan/
-	insteadOf = https://github.com/ikekurghinyan/

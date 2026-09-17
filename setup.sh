@@ -17,6 +17,8 @@ brew install mas
 brew install asdf
 brew install MonitorControl
 brew install swiftformat
+brew install gh
+brew install direnv
 
 ## Agent CLIs and RTK integration
 echo "Installing Agent CLIs..."
@@ -162,6 +164,26 @@ defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
 echo "Planting Configuration Files..."
 git clone git@github.com:dempfi/config.git $HOME/temp
 cp -r "$HOME/temp/.config" "$HOME"
+
+echo "Configuring git identities (dempfi by default, ikekurghinyan under ~/Developer/toptal)..."
+mkdir -p "$HOME/Developer/toptal"
+TOPTAL_GIT_LOCAL="$HOME/.config/git/toptal.local.config"
+if [ ! -f "$TOPTAL_GIT_LOCAL" ]; then
+  read -r -p "Work git email for ~/Developer/toptal: " TOPTAL_EMAIL
+  printf '[user]\n\tname = Ike Kurghinyan\n\temail = %s\n\tuseConfigOnly = true\n' "$TOPTAL_EMAIL" > "$TOPTAL_GIT_LOCAL"
+  chmod 600 "$TOPTAL_GIT_LOCAL"
+fi
+GH_CONFIG_DIR="$HOME/.config/gh" gh auth status >/dev/null 2>&1 || {
+  echo "Log in to GitHub as dempfi"
+  GH_CONFIG_DIR="$HOME/.config/gh" gh auth login --hostname github.com --git-protocol https --web
+}
+GH_CONFIG_DIR="$HOME/.config/gh-work" gh auth status >/dev/null 2>&1 || {
+  echo "Log in to GitHub as ikekurghinyan"
+  GH_CONFIG_DIR="$HOME/.config/gh-work" gh auth login --hostname github.com --git-protocol https --web
+}
+cp "$HOME/temp/.config/git/config" "$HOME/.config/git/config"
+echo "  personal: $(GH_CONFIG_DIR="$HOME/.config/gh" gh api user -q .login)"
+echo "  work:     $(GH_CONFIG_DIR="$HOME/.config/gh-work" gh api user -q .login)"
 mkdir -p "$HOME/.claude" "$HOME/.codex"
 cp "$HOME/temp/.claude/RTK.md" "$HOME/temp/.claude/statusline-command.sh" "$HOME/.claude/"
 sed "s|/Users/dempfi|$HOME|g" "$HOME/temp/.claude/CLAUDE.md" > "$HOME/.claude/CLAUDE.md"
