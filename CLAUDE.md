@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Purpose
 
-This is a macOS dotfiles repository that bootstraps a complete development environment. It configures Fish shell, Git, window management (yabai), keyboard shortcuts (skhd), custom fonts (Iosevka), and terminal/IDE themes (Ayu).
+This is a macOS dotfiles repository that bootstraps a complete development environment. It configures Fish shell, Git, custom fonts (Iosevka), and terminal/IDE themes (Ayu).
 
 ## Setup
 
@@ -92,4 +92,4 @@ The Fish prompt system in `.config/fish/functions/` uses interconnected git help
 
 ### Key Homebrew Dependencies
 
-Installed by setup.sh: fish, asdf (version manager), yabai, skhd, iTerm2, VS Code
+Installed by setup.sh: fish, asdf (version manager), gh, direnv, iTerm2, VS Code

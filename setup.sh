@@ -191,19 +191,6 @@ cp -R "$HOME/temp/.claude/hooks" "$HOME/temp/.claude/rules" "$HOME/temp/.claude/
 cp "$HOME/temp/.codex/RTK.md" "$HOME/.codex/"
 sed "s|/Users/dempfi|$HOME|g" "$HOME/temp/.codex/AGENTS.md" > "$HOME/.codex/AGENTS.md"
 
-echo "Configuring Serena..."
-mkdir -p "$HOME/.serena"
-SERENA_CONFIG_FILE="$HOME/.serena/serena_config.yml"
-if [ -f "$SERENA_CONFIG_FILE" ]; then
-  if grep -q '^web_dashboard_open_on_launch:' "$SERENA_CONFIG_FILE"; then
-    sed -i '' 's/^web_dashboard_open_on_launch:.*/web_dashboard_open_on_launch: false/' "$SERENA_CONFIG_FILE"
-  else
-    printf '\nweb_dashboard_open_on_launch: false\n' >> "$SERENA_CONFIG_FILE"
-  fi
-else
-  cp "$HOME/temp/serena/serena_config.yml" "$SERENA_CONFIG_FILE"
-fi
-
 echo "Configuring RTK..."
 # Keep Claude's settings local: the official initializer adds only the RTK hook.
 rtk init --global --hook-only --auto-patch
