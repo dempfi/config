@@ -41,7 +41,7 @@ mas install 497799835 # Install XCode
 
 echo "Planting ssh keys..."
 cp -r $HOME/Library/Mobile\ Documents/com~apple~CloudDocs/.ssh $HOME/.ssh
-chmod 600 $HOME/.ssh/id_ed25519
+chmod 600 $HOME/.ssh/id_ed25519 $HOME/.ssh/id_ed25519_toptal
 
 echo "Changing macOS defaults..."
 
@@ -166,24 +166,8 @@ git clone git@github.com:dempfi/config.git $HOME/temp
 cp -r "$HOME/temp/.config" "$HOME"
 
 echo "Configuring git identities (dempfi by default, ikekurghinyan under ~/Developer/toptal)..."
-mkdir -p "$HOME/Developer/toptal"
-TOPTAL_GIT_LOCAL="$HOME/.config/git/toptal.local.config"
-if [ ! -f "$TOPTAL_GIT_LOCAL" ]; then
-  read -r -p "Work git email for ~/Developer/toptal: " TOPTAL_EMAIL
-  printf '[user]\n\tname = Ike Kurghinyan\n\temail = %s\n\tuseConfigOnly = true\n' "$TOPTAL_EMAIL" > "$TOPTAL_GIT_LOCAL"
-  chmod 600 "$TOPTAL_GIT_LOCAL"
-fi
-GH_CONFIG_DIR="$HOME/.config/gh" gh auth status >/dev/null 2>&1 || {
-  echo "Log in to GitHub as dempfi"
-  GH_CONFIG_DIR="$HOME/.config/gh" gh auth login --hostname github.com --git-protocol https --web
-}
-GH_CONFIG_DIR="$HOME/.config/gh-work" gh auth status >/dev/null 2>&1 || {
-  echo "Log in to GitHub as ikekurghinyan"
-  GH_CONFIG_DIR="$HOME/.config/gh-work" gh auth login --hostname github.com --git-protocol https --web
-}
-cp "$HOME/temp/.config/git/config" "$HOME/.config/git/config"
-echo "  personal: $(GH_CONFIG_DIR="$HOME/.config/gh" gh api user -q .login)"
-echo "  work:     $(GH_CONFIG_DIR="$HOME/.config/gh-work" gh api user -q .login)"
+bash "$HOME/.config/git/identities.sh" setup
+
 mkdir -p "$HOME/.claude" "$HOME/.codex"
 cp "$HOME/temp/.claude/RTK.md" "$HOME/temp/.claude/statusline-command.sh" "$HOME/.claude/"
 sed "s|/Users/dempfi|$HOME|g" "$HOME/temp/.claude/CLAUDE.md" > "$HOME/.claude/CLAUDE.md"
