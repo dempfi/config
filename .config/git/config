@@ -1,3 +1,5 @@
+[core]
+  editor = code --wait
 [color]
   ui = auto
 [color "branch"]
@@ -44,3 +46,9 @@
 	program = gpg
 [commit]
 	gpgsign = false
+[credential "https://github.com"]
+	helper =
+	helper = !GH_CONFIG_DIR=$HOME/.config/gh /opt/homebrew/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !GH_CONFIG_DIR=$HOME/.config/gh /opt/homebrew/bin/gh auth git-credential

@@ -17,6 +17,8 @@ brew install mas
 brew install asdf
 brew install MonitorControl
 brew install swiftformat
+brew install gh
+brew install direnv
 
 ## Agent CLIs and RTK integration
 echo "Installing Agent CLIs..."
@@ -162,6 +164,10 @@ defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
 echo "Planting Configuration Files..."
 git clone git@github.com:dempfi/config.git $HOME/temp
 cp -r "$HOME/temp/.config" "$HOME"
+
+echo "Logging in to GitHub..."
+gh auth status >/dev/null 2>&1 || gh auth login --hostname github.com --git-protocol https --web
+
 mkdir -p "$HOME/.claude" "$HOME/.codex"
 cp "$HOME/temp/.claude/RTK.md" "$HOME/temp/.claude/statusline-command.sh" "$HOME/.claude/"
 sed "s|/Users/dempfi|$HOME|g" "$HOME/temp/.claude/CLAUDE.md" > "$HOME/.claude/CLAUDE.md"
