@@ -5,6 +5,7 @@
 // Blocks Grep on code symbols. Suggests LSP equivalent for the active provider.
 
 const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/detect-lsp-provider');
+const state = require('./lib/lsp-state');
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -14,6 +15,7 @@ process.stdin.on('end', () => {
   try { data = JSON.parse(raw); } catch (e) { process.exit(0); }
 
   if (data.tool_name !== 'Grep') process.exit(0);
+  if (state.lspCameBackEmptyRecently(data)) process.exit(0);
 
   const params  = data.tool_input || {};
   // String coercion: non-string pattern (number, array, etc.) would throw on .trim()
@@ -26,7 +28,7 @@ process.stdin.on('end', () => {
     process.exit(0);
   }
 
-  if (/\.(md|txt|log|json|jsonc|yaml|yml|env|csv|toml|xml|sql|sh|css|scss)/i.test(glob)) {
+  if (/\.(md|txt|log|json|jsonc|yaml|yml|env|csv|toml|xml|sql|sh|css|scss|plist|pbxproj|xcconfig|xcstrings|strings|entitlements)/i.test(glob)) {
     process.exit(0);
   }
 

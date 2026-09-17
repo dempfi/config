@@ -45,9 +45,9 @@ Python triple-quoted docstrings are string literals rather than comments and are
 
 ## Note
 
-This enforces the no-comments rule in `~/.config/agents/engineering.md` mechanically: the rule
-admits no exception for invariants or units, and neither does the guard. `BLOCK_DOC_COMMENTS` is
-the one line that reintroduces one, for doc comments only.
+This is stricter than `~/.config/agents/engineering.md`, which permits a comment that states an
+invariant, a unit, or a non-obvious constraint. The guard admits no such exception; the constant
+above is the one line that reintroduces it for doc comments.
 
 ## Tests
 

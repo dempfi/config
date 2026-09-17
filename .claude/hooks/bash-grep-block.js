@@ -6,7 +6,12 @@
 // Suggests LSP equivalent for the active provider (cclsp / Serena / ...).
 // Allows: git grep, non-code paths, non-code file types.
 
+const fs = require('fs');
+const path = require('path');
 const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/detect-lsp-provider');
+const state = require('./lib/lsp-state');
+
+const XCODE_CONFIG = 'plist|pbxproj|xcconfig|xcstrings|strings|entitlements';
 
 // Zero-width / formatting chars that would split tokens invisibly and
 // bypass ASCII regex symbol detection.
@@ -26,8 +31,9 @@ process.stdin.on('end', () => {
   // Case-insensitive to catch `GREP`, `RG` variants
   if (!/\b(grep|rg|ag|ack)\b/i.test(cmd)) process.exit(0);
   if (/\bgit\s+grep\b/i.test(cmd)) process.exit(0);
+  if (state.lspCameBackEmptyRecently(data)) process.exit(0);
   if (/(?:^|[\/\\])(?:supabase[\/\\]migrations|\.task|\.claude|node_modules|knowledge-vault)(?:[\/\\]|$)/i.test(cmd)) process.exit(0);
-  if (/--include=?\S*\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log)\b/i.test(cmd)) process.exit(0);
+  if (new RegExp(`(?:--include|--glob|-g)[=\\s]['"]?\\S*\\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log|${XCODE_CONFIG})\\b`, 'i').test(cmd)) process.exit(0);
 
   const cleaned = cmd.replace(/\\"/g, '"');
   const patternMatch =
@@ -52,9 +58,19 @@ process.stdin.on('end', () => {
 
   const isNamedFileSearch = () => {
     if (/(?:^|\s)-{1,2}(?:r|R|recursive|include|exclude|glob)\b/.test(cmd)) return false;
-    const targets = cmd.match(/(?:^|\s)(?:"[^"]*"|'[^']*'|[^\s|;&]+)\.(?:svelte|vue|tsx?|jsx?|mjs|cjs)(?=$|[\s|;&"'])/gi) || [];
+    const rest = cleaned.replace(patternMatch[0], ' ');
+    const targets = (rest.match(/(?:^|\s)(?:"[^"]*"|'[^']*'|[^\s|;&]+)(?=$|[\s|;&])/g) || [])
+      .map(t => t.trim().replace(/^["']|["']$/g, ''))
+      .filter(t => !t.startsWith('-') && /\.[A-Za-z]\w{0,11}$/.test(t));
     if (targets.length === 0) return false;
-    return !targets.some(t => /[*?]/.test(t));
+    return targets.every(t => {
+      if (/[*?]/.test(t)) return false;
+      try {
+        return fs.statSync(path.resolve(String(data.cwd || process.cwd()), t)).isFile();
+      } catch {
+        return false;
+      }
+    });
   };
 
   const fullPattern = patternMatch[1];
@@ -90,7 +106,7 @@ process.stdin.on('end', () => {
     const targetsCodeEarly =
       /\bsrc[\\/]|\bapp[\\/]|components[\\/]|lib[\\/]|hooks[\\/]|utils[\\/]|services[\\/]|actions[\\/]/i.test(cmd) ||
       /\.tsx?\b|\.jsx?\b/i.test(cmd);
-    const hasNonCodeTargetEarly = /\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log|toml|xml)\b/i.test(cmd) && !targetsCodeEarly;
+    const hasNonCodeTargetEarly = new RegExp(`\\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log|toml|xml|${XCODE_CONFIG})\\b`, 'i').test(cmd) && !targetsCodeEarly;
     if (hasNonCodeTargetEarly) process.exit(0);
 
     const isSimplePipe = /\|/.test(cmd) && !/xargs|exec/.test(cmd);
@@ -116,7 +132,7 @@ process.stdin.on('end', () => {
     /-exec\s+(grep|rg|ag|ack)\b/i.test(cmd);
 
   const hasNonCodeTarget =
-    /\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log|toml|xml)\b/i.test(cmd) &&
+    new RegExp(`\\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log|toml|xml|${XCODE_CONFIG})\\b`, 'i').test(cmd) &&
     !targetsCode;
 
   // Symbols are present — only bypass if the command is unambiguously
