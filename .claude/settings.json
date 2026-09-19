@@ -92,6 +92,12 @@
           {
             "type": "command",
             "command": "node ~/.claude/hooks/lsp-pre-delegation.js"
+          },
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/subagent-model-guard.cjs",
+            "timeout": 10,
+            "statusMessage": "Checking subagent model"
           }
         ]
       },
