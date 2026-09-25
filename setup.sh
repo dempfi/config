@@ -178,7 +178,13 @@ sed "s|/Users/dempfi|$HOME|g" "$HOME/temp/.codex/AGENTS.md" > "$HOME/.codex/AGEN
 echo "Configuring RTK..."
 # Keep Claude's settings local: the official initializer adds only the RTK hook.
 rtk init --global --hook-only --auto-patch
-# Codex is configured by the tracked ~/.codex/AGENTS.md and RTK.md files above.
+rtk init --global --codex < /dev/null
+rtk init --global --copilot < /dev/null
+grep -q '^\[sandbox_workspace_write\]' "$HOME/.codex/config.toml" 2>/dev/null ||
+  printf '\n[sandbox_workspace_write]\nwritable_roots = ["%s/Library/Application Support/rtk"]\n' "$HOME" >> "$HOME/.codex/config.toml"
+RTK_CONFIG="$HOME/Library/Application Support/rtk/config.toml"
+[ -f "$RTK_CONFIG" ] || rtk config --create
+sed -i '' 's/^emoji = true/emoji = false/' "$RTK_CONFIG"
 rtk telemetry disable
 rtk verify
 
