@@ -1,0 +1,17 @@
+theme = light:Ayu Light,dark:Ayu Mirage
+shell-integration = fish
+font-size = 15
+adjust-cell-height = 15%
+font-family = Iosevka
+font-thicken = true
+font-thicken-strength = 128
+window-colorspace = display-p3
+cursor-style = block
+shell-integration-features = no-cursor
+cursor-style-blink = false
+macos-titlebar-style = tabs
+auto-update-channel = tip
+keybind = cmd+right=next_tab
+keybind = cmd+left=previous_tab
+keybind = shift+cmd+right=move_tab:1
+keybind = shift+cmd+left=move_tab:-1

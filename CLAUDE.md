@@ -28,7 +28,7 @@ Or run locally:
 - `.claude/` - Claude Code agent layer: settings, hooks, and rules (see below)
 - `.codex/` - Codex instruction files, copied to `~/.codex/`
 - `font/` - Custom Iosevka TTF fonts (copied to `~/Library/Fonts/`)
-- `themes/` - iTerm2 (.itermcolors) themes; Xcode themes are installed from [ayu-theme/ayu-xcode](https://github.com/ayu-theme/ayu-xcode)
+- `.config/ghostty/config` - Ghostty settings; the Ayu themes it names ship with Ghostty. Xcode themes are installed from [ayu-theme/ayu-xcode](https://github.com/ayu-theme/ayu-xcode)
 - `setup.sh` - Main bootstrap script that installs Homebrew packages, copies configs, and sets macOS preferences
 
 ### AI Agent Layer
@@ -92,4 +92,4 @@ The Fish prompt system in `.config/fish/functions/` uses interconnected git help
 
 ### Key Homebrew Dependencies
 
-Installed by setup.sh: fish, asdf (version manager), gh, direnv, iTerm2, VS Code
+Installed by setup.sh: fish, asdf (version manager), gh, direnv, Ghostty, VS Code

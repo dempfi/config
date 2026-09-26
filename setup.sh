@@ -29,7 +29,7 @@ brew install agent-browser
 
 ## Casks
 echo "Installing Brew Casks..."
-brew install --cask iterm2
+brew install --cask ghostty
 brew install --cask sketch
 brew install --cask zoom
 brew install --cask transmission
@@ -157,10 +157,6 @@ defaults write NSGlobalDomain NSAutomaticQuoteSubstitutionEnabled -bool false
 # Do not close windows when closing an app
 defaults write -g NSQuitAlwaysKeepsWindows -bool true
 
-# iTerm
-defaults write com.googlecode.iterm2 PrefsCustomFolder -string "$HOME/.config/iterm2"
-defaults write com.googlecode.iterm2 LoadPrefsFromCustomFolder -bool true
-
 echo "Planting Configuration Files..."
 git clone git@github.com:dempfi/config.git $HOME/temp
 cp -r "$HOME/temp/.config" "$HOME"
@@ -203,10 +199,6 @@ bash "$HOME/.config/agents/install-skills.sh"
 echo "Making Fish default shell..."
 sudo sh -c 'echo /opt/homebrew/bin/fish >> /etc/shells'
 chsh -s /opt/homebrew/bin/fish
-
-# Installing iterm themes
-open "$HOME/temp/themes/ayu-light.itermcolors"
-open "$HOME/temp/themes/ayu-mirage.itermcolors"
 
 # Installing Xcode themes and fonts from ayu-theme/ayu-xcode
 curl -fsSL https://raw.githubusercontent.com/ayu-theme/ayu-xcode/master/install.sh | sh -s -- --with-fonts
