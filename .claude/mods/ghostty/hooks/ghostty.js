@@ -130,6 +130,18 @@ function open(app, req) {
   return { id: id }
 }
 
+function tab(app, req) {
+  let found = null
+  app.windows().forEach(w => {
+    w.tabs().forEach(t => {
+      if (!found && t.terminals().some(term => term.id() === req.pane)) found = t
+    })
+  })
+  if (!found) throw new Error('no tab holds pane ' + req.pane)
+  found.nameOverride = req.title
+  return {}
+}
+
 function focus(app, req) {
   app.focus(terminalById(app, req.pane))
   return {}
@@ -140,7 +152,7 @@ function close(app, req) {
   return {}
 }
 
-const OPS = { list: list, read: read, type: type, key: key, open: open, focus: focus, close: close }
+const OPS = { list: list, read: read, type: type, key: key, open: open, tab: tab, focus: focus, close: close }
 
 function run(argv) {
   const req = JSON.parse(argv[0])

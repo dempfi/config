@@ -129,7 +129,11 @@ async function uuid($: EngineInterface) {
   return made.stdout.trim().toLowerCase()
 }
 
-async function ghostty($: EngineInterface, name: 'open' | 'close', args: Record<string, unknown>) {
+async function markTab($: EngineInterface, pane: string, title: string, color: string) {
+  await ghostty($, 'tab', { pane, title, color }).catch(() => '')
+}
+
+async function ghostty($: EngineInterface, name: 'open' | 'close' | 'tab', args: Record<string, unknown>) {
   const ran = await $.tool.call({ tool: `mcp__ghostty__${name}`, ...args } as Parameters<EngineInterface['tool']['call']>[0])
   if (ran.deny !== undefined) throw new Error(ran.deny)
   return typeof ran.result === 'string' ? ran.result : (ran.text ?? '')
@@ -158,10 +162,11 @@ async function spawn($: EngineInterface, lead: Lead, request: ProjectRequest) {
   const cwd = request.cwd?.trim() || (await $.session.cwd())
   const opened = await ghostty($, 'open', { where: 'tab', cwd, command, title: `${lead.name} · ${role}` })
   const pane = /pane ([0-9A-Fa-f-]{36})/.exec(opened)?.[1]
+  if (pane) await markTab($, pane, `${lead.name} · ${role}`, lead.color)
 
   const worker: Worker = { role, sessionId, name: sessionName, cwd, status: 'starting', ...(pane ? { pane } : {}) }
   await saveLead($, { ...lead, workers: [...lead.workers, worker] })
-  return `Spawned ${sessionName} in ${cwd}${pane ? ` (pane ${pane})` : ''}. It reads its task from ${taskPath}.`
+  return `Spawned ${sessionName} in ${cwd}${pane ? `, pane ${pane}` : ''}`
 }
 
 async function serve($: EngineInterface, request: ProjectRequest) {
@@ -173,7 +178,9 @@ async function serve($: EngineInterface, request: ProjectRequest) {
     if (!summary) throw new Error('define needs a summary')
     const color = isColor(request.color) ? request.color : lead.color
     await saveLead($, { ...lead, summary, color })
-    return `Project "${lead.name}" defined, color ${color}: ${summary}`
+    await markTab($, await ownName($), `${lead.name} · lead`, color)
+    for (const worker of lead.workers) if (worker.pane) await markTab($, worker.pane, `${lead.name} · ${worker.role}`, color)
+    return `Defined, ${color}`
   }
 
   if (request.action === 'spawn') return spawn($, lead, request)
@@ -242,7 +249,9 @@ export const register: Register = on => {
     }
     const name = slug(args)
     if (!name) return { text: 'Give the project a name.' }
-    await saveLead($, { name, color: pickColor(name), workers: [] })
+    const color = pickColor(name)
+    await saveLead($, { name, color, workers: [] })
+    await markTab($, await ownName($), `${name} · lead`, color)
     startPolling($)
     void $.prompt.submit({ text: `Start project "${name}": interview me to pin down the exact problem before anything else.` })
     return { text: `Project "${name}" started; this session leads it.`, context: [leadContext(name)] }

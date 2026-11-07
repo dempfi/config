@@ -146,6 +146,30 @@ export function tail(text: string, lines: number) {
   return { text: kept.join('\n'), dropped }
 }
 
+export const TAB_COLORS = {
+  blue: '🟦',
+  green: '🟩',
+  purple: '🟪',
+  orange: '🟧',
+  red: '🟥',
+  yellow: '🟨',
+  brown: '🟫',
+  teal: '🩵',
+  pink: '🩷',
+} as const
+
+export type TabColor = keyof typeof TAB_COLORS
+
+export function isTabColor(value: unknown): value is TabColor {
+  return typeof value === 'string' && value in TAB_COLORS
+}
+
+export function tabTitle(title: string | undefined, color: TabColor | undefined) {
+  const text = title?.trim() ?? ''
+  const marker = color ? TAB_COLORS[color] : ''
+  return [marker, text].filter(Boolean).join(' ')
+}
+
 export function headline(pane: Pane) {
   const who = pane.isThisSession
     ? 'this session'

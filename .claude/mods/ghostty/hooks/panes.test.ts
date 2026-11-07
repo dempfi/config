@@ -1,5 +1,15 @@
 import { expect, test } from 'claude-code/testing'
-import { type RawPane, clean, findPane, isUnderTheUser, joinPanes, parsePs, showsPermissionDialog, tail } from './panes.ts'
+import {
+  type RawPane,
+  clean,
+  findPane,
+  isUnderTheUser,
+  joinPanes,
+  parsePs,
+  showsPermissionDialog,
+  tabTitle,
+  tail,
+} from './panes.ts'
 
 const WIDE = 130
 const row = (left: string, right = '') => left.padEnd(WIDE, ' ') + '│' + right
@@ -58,6 +68,13 @@ test('an image on screen reads as one marker, not its placeholder cells', async 
   expect(text).toContain('[image]')
   expect(text).not.toContain('\u{10EEEE}')
   expect(text.length).toBeLessThan(80)
+})
+
+test('a tab title leads with its color marker, and empty input clears the override', async () => {
+  expect(tabTitle('render · frame', 'blue')).toBe('🟦 render · frame')
+  expect(tabTitle('render · frame', undefined)).toBe('render · frame')
+  expect(tabTitle(undefined, 'green')).toBe('🟩')
+  expect(tabTitle('  ', undefined)).toBe('')
 })
 
 test('a Claude permission dialog on screen is recognised', async () => {

@@ -10,6 +10,9 @@ import {
   joinPanes,
   parsePs,
   showsPermissionDialog,
+  TAB_COLORS,
+  isTabColor,
+  tabTitle,
   tail,
 } from './panes.ts'
 
@@ -86,6 +89,19 @@ const TOOLS = [
         takeFocus: { type: 'boolean' },
       },
       required: ['where'],
+    },
+  },
+  {
+    name: 'tab',
+    description: "Renames a pane's tab, led by a colored square so related tabs group by color; no title and no color clears it.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pane: PANE,
+        title: { type: 'string' },
+        color: { type: 'string', enum: Object.keys(TAB_COLORS) },
+      },
+      required: ['pane'],
     },
   },
   {
@@ -211,6 +227,12 @@ async function serve($: EngineInterface, name: string, args: Record<string, unkn
     }
     await helper($, { op: 'key', pane: pane.id, key: String(args.key), modifiers: args.modifiers })
     return reply(`Pressed ${args.modifiers ? `${args.modifiers}+` : ''}${args.key} in ${pane.id}.`)
+  }
+
+  if (name === 'tab') {
+    const title = tabTitle(typeof args.title === 'string' ? args.title : undefined, isTabColor(args.color) ? args.color : undefined)
+    await helper($, { op: 'tab', pane: pane.id, title })
+    return reply(title ? `Tab: ${title}` : 'Tab title cleared.')
   }
 
   if (name === 'focus') {
