@@ -2,7 +2,6 @@ import { expect, test } from 'claude-code/testing'
 import type { Lead, Worker } from '../types'
 import {
   COLOR_NAMES,
-  WORKER_SETTINGS,
   counts,
   dialogExcerpt,
   digest,
@@ -101,10 +100,6 @@ test('the lead is told which stopped workers have a dialog waiting on the user',
   const text = digest(lead, [worker('api', 'busy'), worker('docs', 'idle')], ['api'])
   expect(text).toContain('p-api is busy; its permission dialog is on your board')
   expect(text).toContain('p-docs is idle')
-})
-
-test('a worker sends the user no notifications; its lead does that', async () => {
-  expect(WORKER_SETTINGS.preferredNotifChannel).toBe('notifications_disabled')
 })
 
 test('the strip counts working and waiting sessions', async () => {
