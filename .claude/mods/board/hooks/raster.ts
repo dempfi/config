@@ -2,7 +2,6 @@ export type Plot = {
   width: number
   height: number
   rows: number
-  grid: number[]
   series: { color: string; points: [number, number][] }[]
   connect: boolean
   xRange: { min: number; max: number }
@@ -16,7 +15,6 @@ export const MAX_BYTES = 1_900_000
 const LINE_WIDTH = 2.4
 const DOT_RADIUS = 3.2
 const PAD = 5
-const GRID = { r: 128, g: 128, b: 128, a: 0.16 }
 
 const MAX_SIDE = 2048
 
@@ -152,10 +150,6 @@ export function draw(plot: Plot) {
   const toY = (y: number) => bottom - ((y - plot.yRange.min) / (plot.yRange.max - plot.yRange.min || 1)) * (bottom - top)
   const fromX = (px: number) => plot.xRange.min + ((px - left) / (right - left || 1)) * (plot.xRange.max - plot.xRange.min)
 
-  for (const row of plot.grid) {
-    const y = Math.round(top + ((bottom - top) * row) / Math.max(1, plot.rows - 1))
-    for (let x = left; x < right; x += 1) if (x % 4 < 2) canvas.blend(x, y, GRID, GRID.a)
-  }
 
   const isFilled = plot.connect && plot.series.length <= 2
   plot.series.forEach(series => {
@@ -197,7 +191,6 @@ export type Bars = {
   width: number
   height: number
   rows: number
-  grid: number[]
   series: { color: string; values: number[] }[]
   max: number
   isHorizontal: boolean
@@ -268,10 +261,6 @@ export function drawBars(bars: Bars) {
 
   const top = rowHeight / 2
   const bottom = bars.height - rowHeight / 2
-  for (const row of bars.grid) {
-    const y = Math.round(top + ((bottom - top) * row) / Math.max(1, bars.rows - 1))
-    for (let x = PAD; x < bars.width - PAD; x += 1) if (x % 4 < 2) canvas.blend(x, y, GRID, GRID.a)
-  }
   const slot = (bars.width - 2 * PAD) / Math.max(1, count)
   const group = slot * BAR_SHARE
   const barWidth = group / Math.max(1, bars.series.length)

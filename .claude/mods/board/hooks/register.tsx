@@ -82,7 +82,6 @@ function plotImage(spec: ChartSpec, width: number) {
     const drawn = draw({
       ...size,
       rows: shape.rows,
-      grid: shape.grid,
       series: shape.series,
       connect: spec.kind === 'line',
       xRange: shape.xRange,
@@ -103,7 +102,6 @@ function barImage(spec: ChartSpec, width: number) {
     const drawn = drawBars({
       ...pixelSize(shape.columns, shape.rows),
       rows: shape.rows,
-      grid: shape.grid,
       series: shape.series,
       max: shape.max,
       isHorizontal: shape.isHorizontal,
@@ -113,6 +111,10 @@ function barImage(spec: ChartSpec, width: number) {
     if (images.size > IMAGE_CACHE) images.delete(images.keys().next().value ?? key)
   }
   return { shape, image }
+}
+
+function axisCell(label: string, gutter: number) {
+  return label.padStart(gutter - 1) + (label ? '┤' : '│')
 }
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
@@ -173,7 +175,7 @@ function chartTree(els: Elements, spec: ChartSpec, width: number, prefix: string
           <Box flexDirection="column" width={shape.gutter} flexShrink={0}>
             {shape.yLabels.map((label, row) => (
               <Text key={`${prefix}y${row}`} dimColor>
-                {label.padStart(shape.gutter - 1)}
+                {axisCell(label, shape.gutter)}
               </Text>
             ))}
           </Box>
@@ -193,7 +195,7 @@ function chartTree(els: Elements, spec: ChartSpec, width: number, prefix: string
         <Box flexDirection="column" width={shape.gutter} flexShrink={0}>
           {shape.yLabels.map((label, row) => (
             <Text key={`${prefix}y${row}`} dimColor>
-              {label.padStart(shape.gutter - 1)}
+              {axisCell(label, shape.gutter)}
             </Text>
           ))}
         </Box>
