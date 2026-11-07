@@ -5,10 +5,12 @@ import {
   findPane,
   isUnderTheUser,
   joinPanes,
+  matcher,
   parsePs,
   showsPermissionDialog,
   tabTitle,
   tail,
+  unseen,
 } from './panes.ts'
 
 const WIDE = 130
@@ -68,6 +70,24 @@ test('an image on screen reads as one marker, not its placeholder cells', async 
   expect(text).toContain('[image]')
   expect(text).not.toContain('\u{10EEEE}')
   expect(text.length).toBeLessThan(80)
+})
+
+test('a read since the last one returns only the lines the pane did not show before', async () => {
+  const before = ['[vite] ready', 'GET /a 200', '❯', '  ~/D/acme (main)'].join('\n')
+  const now = ['[vite] ready', 'GET /a 200', 'GET /b 500', 'error: boom', '❯', '  ~/D/acme (main)'].join('\n')
+  expect(unseen(before, now)).toBe('GET /b 500\nerror: boom')
+  expect(unseen(now, now)).toBe('')
+})
+
+test('a line repeated more often than before counts as new', async () => {
+  expect(unseen('GET /a 200', 'GET /a 200\nGET /a 200')).toBe('GET /a 200')
+})
+
+test('a wait pattern is plain text, or a regex between slashes', async () => {
+  expect(matcher('ready in')('VITE ready in 312 ms')).toBe(true)
+  expect(matcher('/\\d+ passed/')('Tests: 42 passed')).toBe(true)
+  expect(matcher('/FAIL/i')('fail')).toBe(true)
+  expect(matcher('ready')('starting')).toBe(false)
 })
 
 test('a tab title leads with its color marker, and empty input clears the override', async () => {

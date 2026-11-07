@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
-import type { Automated, Lead, ProjectRequest, Worker } from '../types'
+import type { Automated, Lead, ProjectAction, ProjectRequest, Worker } from '../types'
 import {
   COLORS,
   COLOR_NAMES,
   counts,
+  dialogExcerpt,
   digest,
   isColor,
   leadContext,
@@ -21,19 +22,16 @@ const automatedAtom = atom({ plugin: 'project', key: 'automated' } as const, nul
 
 const TOOL = 'mcp__project__project' as const
 const POLL_MS = 5000
-const ACTIONS = ['define', 'spawn', 'workers', 'close'] as const
+const ACTIONS = ['define', 'spawn', 'workers', 'finish', 'close', 'spend'] as const satisfies readonly ProjectAction[]
 
 let poller: Timer | undefined
 let isTicking = false
 
 const DESCRIPTION = [
-  'Runs the project this session leads. Only a project lead (started with /project <name>) uses it.',
-  '- define {summary, color}: once the user agrees on the problem, a one-line summary for the strip, and a color (' +
-    COLOR_NAMES.join(', ') +
-    ').',
-  '- spawn {role, task, cwd?, model?}: open a real Claude session in a new Ghostty tab for one task. role is a short name (api, tests, docs); task is a self-contained brief with everything the worker needs; cwd is its working directory, this session\'s when absent.',
-  '- workers: every worker with its pane, session name and status (busy, idle).',
-  '- close {role}: close a finished worker\'s tab.',
+  'Runs the project this session leads (started with /project <name>).',
+  `define {summary, color}: once the problem is agreed; color is one of ${COLOR_NAMES.join(', ')}.`,
+  'spawn {role, task, cwd?, model?, worktree?}: a Claude session in a new tab for one self-contained task; worktree: true gives it its own git worktree and branch.',
+  'workers: each worker with status. finish {role}: a worktree worker\'s commits and diffstat. close {role}: closes its tab and removes a merged, clean worktree. spend: tokens per worker, pinned to the board.',
 ].join('\n')
 
 const SCHEMA = {
@@ -46,6 +44,7 @@ const SCHEMA = {
     task: { type: 'string' },
     cwd: { type: 'string' },
     model: { type: 'string' },
+    worktree: { type: 'boolean' },
   },
   required: ['action'],
 }
@@ -97,6 +96,31 @@ async function refreshed($: EngineInterface, lead: Lead) {
   }))
 }
 
+async function runDir($: EngineInterface, project: string, role: string) {
+  return `${await home($)}/.claude/project-runs/${project}/${role}`
+}
+
+async function blockedSince($: EngineInterface, project: string, worker: Worker) {
+  const stat = await $.fs.stat(`${await runDir($, project, worker.role)}/blocked.json`).catch(() => null)
+  return stat?.kind === 'file' && stat.mtimeMs > (worker.blockedAt ?? 0) ? stat.mtimeMs : null
+}
+
+async function escalate($: EngineInterface, worker: Worker) {
+  if (!worker.pane) return false
+  const screen = await ghostty($, 'read', { pane: worker.pane, lines: 40 }).catch(() => '')
+  const dialog = dialogExcerpt(screen)
+  if (!dialog) return false
+  const text = `${worker.name} asks permission`
+  await $.tool.call({
+    tool: 'mcp__board__board',
+    action: 'ask',
+    text,
+    detail: `${dialog.detail}\n\nYour answer is pressed in ${worker.name} (pane ${worker.pane}).`,
+    options: dialog.options,
+  } as Parameters<EngineInterface['tool']['call']>[0]).catch(() => null)
+  return true
+}
+
 async function tick($: EngineInterface) {
   if (isTicking) return
   isTicking = true
@@ -104,11 +128,21 @@ async function tick($: EngineInterface) {
     const lead = await read($, leadAtom)
     if (!lead || lead.workers.length === 0) return
     const workers = await refreshed($, lead)
-    const changed = workers.some((worker, index) => worker.status !== lead.workers[index]?.status)
+    const asked: string[] = []
+    for (const worker of workers) {
+      const since = await blockedSince($, lead.name, worker)
+      if (since === null) continue
+      worker.blockedAt = since
+      if (await escalate($, worker)) asked.push(worker.role)
+    }
+    const changed =
+      asked.length > 0 ||
+      workers.some((worker, index) => worker.status !== lead.workers[index]?.status || worker.blockedAt !== lead.workers[index]?.blockedAt)
     if (!changed) return
     await saveLead($, { ...lead, workers })
     const stopped = needsAttention(lead.workers, workers)
-    if (stopped.length > 0) await $.prompt.submit({ text: digest(lead, stopped) })
+    const woken = [...stopped, ...workers.filter(worker => asked.includes(worker.role) && !stopped.includes(worker))]
+    if (woken.length > 0) await $.prompt.submit({ text: digest(lead, woken, asked) })
   } finally {
     isTicking = false
   }
@@ -133,7 +167,7 @@ async function markTab($: EngineInterface, pane: string, title: string, color: s
   await ghostty($, 'tab', { pane, title, color }).catch(() => '')
 }
 
-async function ghostty($: EngineInterface, name: 'open' | 'close' | 'tab', args: Record<string, unknown>) {
+async function ghostty($: EngineInterface, name: 'open' | 'close' | 'tab' | 'read', args: Record<string, unknown>) {
   const ran = await $.tool.call({ tool: `mcp__ghostty__${name}`, ...args } as Parameters<EngineInterface['tool']['call']>[0])
   if (ran.deny !== undefined) throw new Error(ran.deny)
   return typeof ran.result === 'string' ? ran.result : (ran.text ?? '')
@@ -147,26 +181,87 @@ async function spawn($: EngineInterface, lead: Lead, request: ProjectRequest) {
   const task = request.task?.trim()
   if (!task) throw new Error('spawn needs a task')
 
-  const dir = `${await home($)}/.claude/project-runs/${lead.name}/${role}`
+  const dir = await runDir($, lead.name, role)
   await $.process.run(['mkdir', '-p', dir])
+  let cwd = request.cwd?.trim() || (await $.session.cwd())
+  let worktree: Worker['worktree']
+  if (request.worktree === true) {
+    const made = await makeWorktree($, cwd, `project/${lead.name}/${role}`, `${dir}/tree`)
+    worktree = made.worktree
+    cwd = made.cwd
+  }
+
   const leadName = await ownName($)
   const automated: Automated = { project: lead.name, role, color: lead.color, lead: leadName }
   const briefPath = `${dir}/brief.md`
   const taskPath = `${dir}/task.md`
-  await $.fs.write(briefPath, workerBrief({ project: lead.name, summary: lead.summary, role, lead: leadName }))
+  await $.fs.write(
+    briefPath,
+    workerBrief({ project: lead.name, summary: lead.summary, role, lead: leadName, ...(worktree ? { branch: worktree.branch } : {}) }),
+  )
   await $.fs.write(taskPath, task)
 
   const sessionId = await uuid($)
   const sessionName = `${lead.name}-${role}`
   const command = spawnCommand({ sessionId, sessionName, briefPath, taskPath, model: request.model, automated })
-  const cwd = request.cwd?.trim() || (await $.session.cwd())
   const opened = await ghostty($, 'open', { where: 'tab', cwd, command, title: `${lead.name} · ${role}` })
   const pane = /pane ([0-9A-Fa-f-]{36})/.exec(opened)?.[1]
   if (pane) await markTab($, pane, `${lead.name} · ${role}`, lead.color)
 
-  const worker: Worker = { role, sessionId, name: sessionName, cwd, status: 'starting', ...(pane ? { pane } : {}) }
+  const worker: Worker = {
+    role,
+    sessionId,
+    name: sessionName,
+    cwd,
+    status: 'starting',
+    ...(pane ? { pane } : {}),
+    ...(worktree ? { worktree } : {}),
+  }
   await saveLead($, { ...lead, workers: [...lead.workers, worker] })
-  return `Spawned ${sessionName} in ${cwd}${pane ? `, pane ${pane}` : ''}`
+  return `Spawned ${sessionName} in ${cwd}${worktree ? ` on ${worktree.branch}` : ''}`
+}
+
+async function git($: EngineInterface, args: string[]) {
+  const ran = await $.process.run(['git', ...args])
+  return { isOk: ran.exitCode === 0, out: ran.stdout.trim(), err: ran.stderr.trim() }
+}
+
+async function makeWorktree($: EngineInterface, cwd: string, branch: string, path: string) {
+  const top = await git($, ['-C', cwd, 'rev-parse', '--show-toplevel'])
+  if (!top.isOk) throw new Error(`${cwd} is not in a git repository`)
+  const repo = top.out
+  const base = (await git($, ['-C', repo, 'rev-parse', 'HEAD'])).out
+  const added = await git($, ['-C', repo, 'worktree', 'add', '-b', branch, path, base])
+  if (!added.isOk) throw new Error(`git worktree add failed: ${added.err}`)
+  const inside = cwd.startsWith(repo) ? cwd.slice(repo.length) : ''
+  return { worktree: { repo, path, branch, base }, cwd: `${path}${inside}` }
+}
+
+async function finish($: EngineInterface, worker: Worker) {
+  const tree = worker.worktree
+  if (!tree) return `${worker.name} has no worktree; its changes are in ${worker.cwd}`
+  const log = await git($, ['-C', tree.path, 'log', '--oneline', `${tree.base}..HEAD`])
+  const stat = await git($, ['-C', tree.path, 'diff', '--stat', tree.base])
+  const dirty = await git($, ['-C', tree.path, 'status', '--porcelain'])
+  return [
+    `${tree.branch} in ${tree.path}`,
+    log.out ? log.out : 'no commits yet',
+    dirty.out ? `uncommitted: ${dirty.out.split('\n').length} files` : '',
+    stat.out.split('\n').slice(-12).join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+async function removeWorktree($: EngineInterface, worker: Worker) {
+  const tree = worker.worktree
+  if (!tree) return ''
+  const dirty = await git($, ['-C', tree.path, 'status', '--porcelain'])
+  const merged = await git($, ['-C', tree.repo, 'branch', '--merged', 'HEAD', '--list', tree.branch])
+  if (dirty.out || !merged.out) return ` Kept ${tree.path}: ${dirty.out ? 'uncommitted changes' : `${tree.branch} is not merged`}.`
+  await git($, ['-C', tree.repo, 'worktree', 'remove', tree.path])
+  await git($, ['-C', tree.repo, 'branch', '-d', tree.branch])
+  return ' Removed its worktree and branch.'
 }
 
 async function serve($: EngineInterface, request: ProjectRequest) {
@@ -194,12 +289,86 @@ async function serve($: EngineInterface, request: ProjectRequest) {
       .join('\n')
   }
 
+  if (request.action === 'spend') {
+    const usage = await spendOf($, lead.workers)
+    const rows = lead.workers.map(worker => ({ worker, tokens: usage[worker.sessionId] ?? null }))
+    const counted = rows.filter(row => row.tokens !== null)
+    if (counted.length > 0)
+      await $.tool.call({
+        tool: 'mcp__board__chart',
+        kind: 'hbar',
+        title: `${lead.name}: tokens per worker`,
+        series: [{ values: counted.map(row => total(row.tokens)) }],
+        labels: counted.map(row => row.worker.role),
+        pin: true,
+      } as Parameters<EngineInterface['tool']['call']>[0]).catch(() => null)
+    return rows
+      .map(({ worker, tokens }) =>
+        tokens
+          ? `${worker.role}: ${short(total(tokens))} (in ${short(tokens.input)}, cache ${short(tokens.cacheRead + tokens.cacheWrite)}, out ${short(tokens.output)})`
+          : `${worker.role}: no transcript yet`,
+      )
+      .join('\n')
+  }
+
   const role = slug(request.role ?? '')
   const worker = lead.workers.find(one => one.role === role)
   if (!worker) throw new Error(`no worker "${role}"`)
-  if (worker.pane) await ghostty($, 'close', { pane: worker.pane })
+  if (request.action === 'finish') return finish($, worker)
+  if (worker.pane) await ghostty($, 'close', { pane: worker.pane }).catch(() => '')
+  const kept = await removeWorktree($, worker)
   await saveLead($, { ...lead, workers: lead.workers.filter(one => one.role !== role) })
-  return `Closed ${worker.name}.`
+  return `Closed ${worker.name}.${kept}`
+}
+
+type Tokens = { input: number; cacheRead: number; cacheWrite: number; output: number }
+
+const SPEND_SCRIPT = `
+import sys, json, glob, os
+out = {}
+for sid in sys.argv[1:]:
+    seen, t, found = set(), {'input': 0, 'cacheRead': 0, 'cacheWrite': 0, 'output': 0}, False
+    for path in glob.glob(os.path.expanduser('~/.claude/projects/*/' + sid + '.jsonl')):
+        found = True
+        for line in open(path, errors='replace'):
+            if '"usage"' not in line:
+                continue
+            try:
+                message = json.loads(line).get('message') or {}
+            except ValueError:
+                continue
+            usage = message.get('usage') if isinstance(message, dict) else None
+            key = message.get('id') if isinstance(message, dict) else None
+            if not usage or key in seen:
+                continue
+            seen.add(key)
+            t['input'] += usage.get('input_tokens') or 0
+            t['cacheRead'] += usage.get('cache_read_input_tokens') or 0
+            t['cacheWrite'] += usage.get('cache_creation_input_tokens') or 0
+            t['output'] += usage.get('output_tokens') or 0
+    if found:
+        out[sid] = t
+print(json.dumps(out))
+`
+
+async function spendOf($: EngineInterface, workers: Worker[]) {
+  if (workers.length === 0) return {}
+  const ran = await $.process.run(['python3', '-I', '-c', SPEND_SCRIPT, ...workers.map(worker => worker.sessionId)], {
+    timeoutMs: 60_000,
+  })
+  try {
+    return JSON.parse(ran.stdout) as Record<string, Tokens>
+  } catch {
+    return {}
+  }
+}
+
+function total(tokens: Tokens | null) {
+  return tokens ? tokens.input + tokens.cacheRead + tokens.cacheWrite + tokens.output : 0
+}
+
+function short(value: number) {
+  return value >= 1e6 ? `${(value / 1e6).toFixed(1)}M` : value >= 1e3 ? `${Math.round(value / 1e3)}k` : String(value)
 }
 
 async function restore($: EngineInterface) {
@@ -228,6 +397,16 @@ async function restore($: EngineInterface) {
 }
 
 export const register: Register = on => {
+  on('classic.Notification', async ($, e, next) => {
+    const automated = await read($, automatedAtom)
+    if (automated && /permission/i.test(`${e.notification_type} ${e.message}`)) {
+      const dir = await runDir($, automated.project, automated.role)
+      await $.process.run(['mkdir', '-p', dir])
+      await $.fs.write(`${dir}/blocked.json`, JSON.stringify({ message: e.message }))
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
   on('session.start', async ($, e, next) => {
     await $.tool.register({ name: 'project', description: DESCRIPTION, inputSchema: SCHEMA })
     await $.command.register({

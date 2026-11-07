@@ -11,14 +11,24 @@ import {
   parsePs,
   showsPermissionDialog,
   TAB_COLORS,
+  clean,
   isTabColor,
+  matcher,
   tabTitle,
   tail,
+  unseen,
 } from './panes.ts'
 
 const PREFIX = 'mcp__ghostty__'
 const TOOL = (name: string) => `${PREFIX}${name}`
-const READ_ONLY = new Set([TOOL('panes'), TOOL('read')])
+const READ_ONLY = new Set([TOOL('panes'), TOOL('read'), TOOL('wait')])
+const IDLE_POLL = '3'
+const TEXT_POLL = '5'
+const WAIT_DEFAULT = 120
+const WAIT_MAX = 600
+const DIALOG_MARK = '[permission dialog on screen]'
+
+const lastRead = new Map<string, string>()
 const SPLITS = ['right', 'down', 'left', 'up'] as const
 const PLACES = ['tab', 'window', ...SPLITS] as const
 
@@ -34,13 +44,30 @@ const TOOLS = [
   },
   {
     name: 'read',
-    description: "A pane's screen, or its scrollback, cleaned of padding, sidebars and images.",
+    description:
+      "A pane's screen, or its scrollback, cleaned of padding, sidebars and images. since: true returns only lines not shown at your last read of that pane.",
     inputSchema: {
       type: 'object',
       properties: {
         pane: PANE,
         scope: { type: 'string', enum: ['screen', 'scrollback'] },
         lines: { type: 'number', description: 'last lines; 60 by default' },
+        since: { type: 'boolean' },
+      },
+      required: ['pane'],
+    },
+  },
+  {
+    name: 'wait',
+    description:
+      'Waits until a pane shows text (plain, or /regex/), or until the Claude session in it stops working (idle: true), up to timeout seconds (120 by default, 600 at most). Returns what it saw.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pane: PANE,
+        text: { type: 'string' },
+        idle: { type: 'boolean' },
+        timeout: { type: 'number' },
       },
       required: ['pane'],
     },
@@ -153,6 +180,11 @@ async function sessionRecords($: EngineInterface) {
   return records.filter((record): record is SessionRecord => record !== null && typeof record.pid === 'number')
 }
 
+async function screenOf($: EngineInterface, pane: Pane, scope: 'screen' | 'scrollback') {
+  const { text } = (await helper($, { op: 'read', pane: pane.id, scope })) as { text: string }
+  return clean(text)
+}
+
 async function panes($: EngineInterface) {
   const [listed, sessions, ps, thisSession] = await Promise.all([
     helper($, { op: 'list' }) as Promise<{ frontmost: boolean; panes: RawPane[] }>,
@@ -204,10 +236,40 @@ async function serve($: EngineInterface, name: string, args: Record<string, unkn
   if (name === 'read') {
     const scope = args.scope === 'scrollback' ? 'scrollback' : 'screen'
     const lines = typeof args.lines === 'number' && args.lines > 0 ? Math.floor(args.lines) : 60
-    const { text } = (await helper($, { op: 'read', pane: pane.id, scope })) as { text: string }
-    const kept = tail(text, lines)
+    const screen = await screenOf($, pane, scope)
+    const mark = showsPermissionDialog(screen) ? `${DIALOG_MARK}\n` : ''
+    if (args.since === true && lastRead.has(pane.id)) {
+      const fresh = unseen(lastRead.get(pane.id) ?? '', screen)
+      lastRead.set(pane.id, screen)
+      return reply(`${headline(pane)}\n${mark}${fresh ? tail(fresh, lines).text : '[nothing new]'}`)
+    }
+    lastRead.set(pane.id, screen)
+    const kept = tail(screen, lines)
     const note = kept.dropped > 0 ? `[${kept.dropped} earlier lines]\n` : ''
-    return reply(`${headline(pane)}\n${note}${kept.text}`)
+    return reply(`${headline(pane)}\n${mark}${note}${kept.text}`)
+  }
+
+  if (name === 'wait') {
+    const seconds = Math.min(WAIT_MAX, typeof args.timeout === 'number' && args.timeout > 0 ? args.timeout : WAIT_DEFAULT)
+    const deadline = Date.now() + seconds * 1000
+    if (args.idle === true) {
+      if (!pane.session) return reply('No Claude session runs in that pane.', true)
+      while (Date.now() < deadline) {
+        const now = findPane((await panes($)).panes, pane.id)
+        if (now.session?.status !== 'busy') return reply(`${headline(now)}: stopped working`)
+        await $.process.run(['sleep', IDLE_POLL])
+      }
+      return reply(`${headline(pane)}: still working after ${seconds}s`)
+    }
+    if (typeof args.text !== 'string' || !args.text) return reply('wait needs text or idle', true)
+    const isMatch = matcher(args.text)
+    while (Date.now() < deadline) {
+      const screen = await screenOf($, pane, 'screen')
+      const hit = screen.split('\n').filter(isMatch)
+      if (hit.length > 0) return reply(`${headline(pane)}: ${hit.slice(-3).join(' | ')}`)
+      await $.process.run(['sleep', TEXT_POLL])
+    }
+    return reply(`${headline(pane)}: no "${args.text}" after ${seconds}s`)
   }
 
   if (name === 'type' || name === 'key') {

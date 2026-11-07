@@ -139,6 +139,28 @@ export function clean(text: string) {
     .replace(/\n{3,}/g, '\n\n')
 }
 
+export function unseen(before: string, now: string) {
+  const seen = new Map<string, number>()
+  for (const line of before.split('\n')) if (line.trim()) seen.set(line, (seen.get(line) ?? 0) + 1)
+  const fresh: string[] = []
+  for (const line of now.split('\n')) {
+    if (!line.trim()) continue
+    const count = seen.get(line) ?? 0
+    if (count > 0) seen.set(line, count - 1)
+    else fresh.push(line)
+  }
+  return fresh.join('\n')
+}
+
+export function matcher(pattern: string) {
+  const regex = /^\/(.+)\/([a-z]*)$/.exec(pattern)
+  if (regex?.[1]) {
+    const compiled = new RegExp(regex[1], regex[2])
+    return (text: string) => compiled.test(text)
+  }
+  return (text: string) => text.includes(pattern)
+}
+
 export function tail(text: string, lines: number) {
   const rows = clean(text).replace(/\s+$/, '').split('\n')
   const kept = rows.slice(-lines)

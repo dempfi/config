@@ -90,15 +90,21 @@ parse. Changing that means the guard silently stops guarding.
     the pane in front of the user, so it never writes into a prompt someone is typing in.
     Reading a pane passes through the clipboard and puts its contents back. Typing into a pane
     that shows a permission dialog is refused unless the user approved that prompt, so no session
-    approves another's permissions on its own.
+    approves another's permissions on its own. A read can return only what changed since the last
+    one, and a wait blocks on a pane's text or a session going idle, so watching costs no polling
+    turns. Tabs are renamed and marked with a colored circle, so a project's tabs group by color.
   - **board** is a pane the user and one session share: the session's plan ticked off live, the
     questions it parks for the user instead of stopping, and the settled state of the work. An
-    answer given on the board reaches the session as a message.
+    answer given on the board reaches the session as a message, and a parked question notifies
+    the user. Its chart tool paints line, scatter, bar and horizontal bar charts with AppKit,
+    labels inside, inline in the transcript or pinned to the board.
   - **project** turns a session into a project lead with `/project <name>`. The lead interviews
     the user until the problem is agreed, then runs real Claude sessions in Ghostty tabs as its
-    workers, wakes when one stops, and unblocks it within the user's intent; the user's calls go
-    to the lead's board. The lead's strip is the project's color and title; a worker's is a
-    hazard tape marked automated.
+    workers, each in its own git worktree when it changes code. It talks to them by message,
+    wakes when one stops, and unblocks it within the user's intent; the user's calls go to the
+    lead's board. A worker's permission dialog reaches that board on its own, through the
+    worker's Notification hook, and the user's answer is pressed in the worker. The lead's strip
+    is the project's color and title; a worker's is a hazard tape marked automated.
 
   `claude plugin test .claude/mods/<mod>` runs a mod's tests.
 

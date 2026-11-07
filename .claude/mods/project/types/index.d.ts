@@ -7,6 +7,8 @@ export type Worker = {
   cwd: string
   pane?: string
   status?: string
+  blockedAt?: number
+  worktree?: { repo: string; path: string; branch: string; base: string }
 }
 
 export type Lead = {
@@ -23,7 +25,7 @@ export type Automated = {
   lead: string
 }
 
-export type ProjectAction = 'define' | 'spawn' | 'workers' | 'close'
+export type ProjectAction = 'define' | 'spawn' | 'workers' | 'finish' | 'close' | 'spend'
 
 export type ProjectRequest = {
   action: ProjectAction
@@ -33,6 +35,7 @@ export type ProjectRequest = {
   task?: string
   cwd?: string
   model?: string
+  worktree?: boolean
 }
 
 declare module 'claude-code' {

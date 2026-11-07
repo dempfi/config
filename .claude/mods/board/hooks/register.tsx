@@ -344,6 +344,7 @@ export const register: Register = on => {
     if (e.action === 'show') return { result: summary((await read($, boardAtom)) ?? EMPTY) }
     const outcome = await change($, board => apply(board, e))
     if ('error' in outcome) return { deny: outcome.error }
+    if (e.action === 'ask' && e.text) void $.ui.notify(e.text, { title: 'Waiting on you' })
     return { result: `${outcome.said} · ${progress(outcome.board)}` }
   }).catch(() => ({ deny: 'the board failed' }))
 

@@ -70,20 +70,31 @@ export function leadContext(name: string) {
     '',
     'First, interview the user. Work out with them the exact problem: what outcome they want, how they will judge it done, what is out of scope, and the constraints. Ask one or two questions at a time and build on their answers; propose your reading of the problem and let them correct it. Do not spawn anything until they agree.',
     '',
-    'When the problem is agreed, call the project tool with action "define": a one-line summary (it goes on the strip under the prompt) and a color for the project. Then split the work into tasks that can run in parallel and spawn one worker per task with action "spawn" (role, a self-contained task brief with everything the worker needs, the working directory, optionally a model). Put each worker on your board as a step and tick it off when it reports done.',
+    'When the problem is agreed, call the project tool with action "define": a one-line summary for the strip and a color. Split the work into tasks that can run in parallel and spawn one worker per task (role, a self-contained brief, cwd, optionally a model). A worker that changes code in a git repository gets worktree: true, so workers never share a checkout. Put each worker on your board as a step and tick it off when it reports done.',
     '',
-    'While they run, you are woken when a worker stops. Read its screen with the ghostty read tool, then unblock it: answer its question from what the user wants, or type the next instruction into its pane. Answer for the user only within their stated intent. Permission prompts, spending, pushes and deploys, migrations, deletes and product or values calls are the user\'s: put them on your board with the board ask action and carry the answer back to the worker once they reply.',
+    `Talk to workers with SendMessage, addressed to the worker's session name (shown by spawn and the workers action): it is how you answer a question, give the next instruction or ask for status. Type into a worker's pane only for what a message cannot reach: a dialog or a menu on its screen.`,
+    '',
+    'You are woken when a worker stops. Its message usually says why. When it does not, read its screen with ghostty read using since: true, which returns only what changed. To wait for a worker or a server without polling, use ghostty wait.',
+    '',
+    'Answer for the user only within their stated intent. Permission prompts, spending, pushes and deploys, migrations, deletes and product or values calls are the user\'s. A permission dialog in a worker is put on your board for the user automatically; when their answer arrives, press its number in that worker with ghostty key and userApproved: true. Anything else that is theirs, ask with the board ask action and carry the answer back.',
+    '',
+    'When a worker in a worktree is done, the finish action shows its commits; merging them is a step you take with the user\'s go-ahead. The spend action shows the tokens each worker has used.',
   ].join('\n')
 }
 
-export function workerBrief(input: { project: string; summary: string; role: string; lead: string }) {
+export function workerBrief(input: { project: string; summary: string; role: string; lead: string; branch?: string }) {
   return [
     `You are an automated worker in project "${input.project}", role "${input.role}".`,
     `The project: ${input.summary}`,
-    `Your lead is the Claude session named "${input.lead}". It speaks for the user and may type into this session to answer you.`,
+    `Your lead is the Claude session named "${input.lead}". It speaks for the user and answers you by message.`,
+    ...(input.branch
+      ? [
+          `You work in your own git worktree on branch "${input.branch}". Install its dependencies before running checks there, commit your work on this branch, and never switch branches or push.`,
+        ]
+      : []),
     '',
     'Work your task end to end. Keep your board current: plan your steps, tick them off.',
-    `When you finish, or when you are blocked on something only the user or the lead can decide, send the lead a message with SendMessage to "${input.lead}": what you did, what you need, with paths and evidence. Then stop and wait; the lead answers in this session.`,
+    `When you finish, or when you are blocked on something only the user or the lead can decide, send the lead a message with SendMessage to "${input.lead}": what you did, what you need, with paths and evidence. Then stop and wait for its reply.`,
   ].join('\n')
 }
 
@@ -94,15 +105,27 @@ export function needsAttention(before: Worker[], after: Worker[]) {
   })
 }
 
-export function digest(lead: Lead, stopped: Worker[]) {
-  const lines = stopped.map(
-    worker => `- ${worker.role} (session ${worker.name}, pane ${worker.pane ?? 'unknown'}) is now ${worker.status}`,
-  )
-  return [
-    `Project "${lead.name}": ${stopped.length === 1 ? 'a worker stopped' : `${stopped.length} workers stopped`}.`,
-    ...lines,
-    'Read each screen with the ghostty read tool and unblock or acknowledge it; put anything that is the user\'s call on the board.',
-  ].join('\n')
+export function digest(lead: Lead, stopped: Worker[], asked: string[]) {
+  const lines = stopped.map(worker => {
+    const isAsked = asked.includes(worker.role)
+    return `- ${worker.name} is ${worker.status}${isAsked ? '; its permission dialog is on your board for the user' : ''}`
+  })
+  return [`Project "${lead.name}":`, ...lines].join('\n')
+}
+
+const DIALOG_LINES = 12
+const MAX_OPTIONS = 4
+
+export function dialogExcerpt(screen: string) {
+  const rows = screen.split('\n')
+  const at = rows.findIndex(row => /Do you want to /.test(row))
+  if (at < 0) return null
+  const start = Math.max(0, at - DIALOG_LINES)
+  const options = rows.slice(at + 1, at + 1 + MAX_OPTIONS).filter(row => /^\s*(?:❯\s*)?\d\.\s/.test(row))
+  return {
+    detail: '```\n' + rows.slice(start, at + 1 + MAX_OPTIONS).join('\n').trim() + '\n```',
+    options: options.map(row => row.replace(/^\s*(?:❯\s*)?/, '').trim()),
+  }
 }
 
 export function counts(workers: Worker[]) {

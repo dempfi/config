@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Lead, Worker } from '../types'
-import { COLOR_NAMES, counts, needsAttention, pickColor, slug, spawnCommand, workerBrief } from './project.ts'
+import { COLOR_NAMES, counts, dialogExcerpt, digest, needsAttention, pickColor, slug, spawnCommand, workerBrief } from './project.ts'
 import { SLANT, hazard } from './tape.ts'
 
 function worker(role: string, status: string): Worker {
@@ -62,6 +62,31 @@ test('the worker brief names the lead it reports to', async () => {
   const brief = workerBrief({ project: 'billing', summary: 'Move billing to passes', role: 'api', lead: 'acme-b6' })
   expect(brief).toContain('SendMessage to "acme-b6"')
   expect(brief).toContain('Move billing to passes')
+})
+
+test('a permission dialog on a worker screen becomes a board question with its own options', async () => {
+  const screen = [
+    '⏺ Bash(git push origin main)',
+    ' Bash command',
+    '   git push origin main',
+    ' Do you want to proceed?',
+    ' ❯ 1. Yes',
+    "   2. Yes, and don't ask again for git push commands",
+    '   3. No, and tell Claude what to do differently (esc)',
+    '',
+    '  ~/D/acme (main)',
+  ].join('\n')
+  const dialog = dialogExcerpt(screen)
+  expect(dialog?.options).toEqual(['1. Yes', "2. Yes, and don't ask again for git push commands", '3. No, and tell Claude what to do differently (esc)'])
+  expect(dialog?.detail).toContain('git push origin main')
+  expect(dialogExcerpt('⏺ All tests pass.')).toBe(null)
+})
+
+test('the lead is told which stopped workers have a dialog waiting on the user', async () => {
+  const lead: Lead = { name: 'billing', color: 'blue', workers: [] }
+  const text = digest(lead, [worker('api', 'busy'), worker('docs', 'idle')], ['api'])
+  expect(text).toContain('p-api is busy; its permission dialog is on your board')
+  expect(text).toContain('p-docs is idle')
 })
 
 test('the strip counts working and waiting sessions', async () => {
