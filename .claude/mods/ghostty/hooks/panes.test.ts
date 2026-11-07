@@ -71,9 +71,9 @@ test('an image on screen reads as one marker, not its placeholder cells', async 
 })
 
 test('a tab title leads with its color marker, and empty input clears the override', async () => {
-  expect(tabTitle('render · frame', 'blue')).toBe('🟦 render · frame')
+  expect(tabTitle('render · frame', 'blue')).toBe('🔵 render · frame')
   expect(tabTitle('render · frame', undefined)).toBe('render · frame')
-  expect(tabTitle(undefined, 'green')).toBe('🟩')
+  expect(tabTitle(undefined, 'green')).toBe('🟢')
   expect(tabTitle('  ', undefined)).toBe('')
 })
 

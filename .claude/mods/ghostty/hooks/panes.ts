@@ -147,15 +147,15 @@ export function tail(text: string, lines: number) {
 }
 
 export const TAB_COLORS = {
-  blue: '🟦',
-  green: '🟩',
-  purple: '🟪',
-  orange: '🟧',
-  red: '🟥',
-  yellow: '🟨',
-  brown: '🟫',
-  teal: '🩵',
-  pink: '🩷',
+  blue: '🔵',
+  green: '🟢',
+  purple: '🟣',
+  orange: '🟠',
+  red: '🔴',
+  yellow: '🟡',
+  brown: '🟤',
+  black: '⚫',
+  white: '⚪',
 } as const
 
 export type TabColor = keyof typeof TAB_COLORS

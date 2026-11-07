@@ -93,7 +93,7 @@ const TOOLS = [
   },
   {
     name: 'tab',
-    description: "Renames a pane's tab, led by a colored square so related tabs group by color; no title and no color clears it.",
+    description: "Renames a pane's tab, led by a colored circle so related tabs group by color; no title and no color clears it.",
     inputSchema: {
       type: 'object',
       properties: {

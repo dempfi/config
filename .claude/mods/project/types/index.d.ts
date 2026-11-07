@@ -1,4 +1,4 @@
-export type ProjectColor = 'blue' | 'green' | 'purple' | 'orange' | 'teal' | 'pink' | 'red'
+export type ProjectColor = 'blue' | 'green' | 'purple' | 'orange' | 'yellow' | 'brown' | 'red'
 
 export type Worker = {
   role: string

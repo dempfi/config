@@ -5,8 +5,8 @@ export const COLORS: Record<ProjectColor, string> = {
   green: '#87d96c',
   purple: '#d4bfff',
   orange: '#ffad66',
-  teal: '#95e6cb',
-  pink: '#f28779',
+  yellow: '#ffd173',
+  brown: '#c8a07a',
   red: '#ff6666',
 }
 

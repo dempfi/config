@@ -219,8 +219,9 @@ async function restore($: EngineInterface) {
     const saved = (await $.store.get(`automated:${id}`)) as Automated | undefined
     if (saved) await update($, automatedAtom, () => saved)
   }
-  const lead = (await $.store.get(`lead:${id}`)) as Lead | undefined
-  if (lead) {
+  const saved = (await $.store.get(`lead:${id}`)) as Lead | undefined
+  if (saved) {
+    const lead = isColor(saved.color) ? saved : { ...saved, color: pickColor(saved.name) }
     await update($, leadAtom, () => lead)
     startPolling($)
   }
