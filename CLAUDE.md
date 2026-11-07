@@ -88,7 +88,17 @@ parse. Changing that means the guard silently stops guarding.
     running in it, read a pane's screen or scrollback, type and press keys in it, open splits,
     tabs and windows, focus and close panes. Typing is refused in the pane Claude runs in and in
     the pane in front of the user, so it never writes into a prompt someone is typing in.
-    Reading a pane passes through the clipboard and puts its contents back.
+    Reading a pane passes through the clipboard and puts its contents back. Typing into a pane
+    that shows a permission dialog is refused unless the user approved that prompt, so no session
+    approves another's permissions on its own.
+  - **board** is a pane the user and one session share: the session's plan ticked off live, the
+    questions it parks for the user instead of stopping, and the settled state of the work. An
+    answer given on the board reaches the session as a message.
+  - **project** turns a session into a project lead with `/project <name>`. The lead interviews
+    the user until the problem is agreed, then runs real Claude sessions in Ghostty tabs as its
+    workers, wakes when one stops, and unblocks it within the user's intent; the user's calls go
+    to the lead's board. The lead's strip is the project's color and title; a worker's is a
+    hazard tape marked automated.
 
   `claude plugin test .claude/mods/<mod>` runs a mod's tests.
 

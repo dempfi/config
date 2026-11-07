@@ -1,5 +1,22 @@
 import { expect, test } from 'claude-code/testing'
-import { type RawPane, findPane, isUnderTheUser, joinPanes, parsePs, tail } from './panes.ts'
+import { type RawPane, findPane, isUnderTheUser, joinPanes, parsePs, showsPermissionDialog, tail } from './panes.ts'
+
+test('a Claude permission dialog on screen is recognised', async () => {
+  const dialog = [
+    ' Bash command',
+    '   git push origin main',
+    ' Do you want to proceed?',
+    ' ❯ 1. Yes',
+    "   2. Yes, and don't ask again for git push commands",
+    '   3. No, and tell Claude what to do differently (esc)',
+  ].join('\n')
+  expect(showsPermissionDialog(dialog)).toBe(true)
+})
+
+test('a question or a plain prompt is not a permission dialog', async () => {
+  expect(showsPermissionDialog('Which option do you want?\n 1. Batch\n 2. Send now')).toBe(false)
+  expect(showsPermissionDialog('❯ continue with the migration\n')).toBe(false)
+})
 
 function raw(id: string, tty: string, extra: Partial<RawPane> = {}): RawPane {
   return {

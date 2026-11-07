@@ -1,0 +1,1 @@
+{ "name": "board", "version": "0.1.0", "description": "A board you and the session share: its plan ticked off live, what it waits on you for, and the settled state of the work", "types": "./types/index.d.ts" }

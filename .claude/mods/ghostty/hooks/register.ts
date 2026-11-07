@@ -8,6 +8,7 @@ import {
   isUnderTheUser,
   joinPanes,
   parsePs,
+  showsPermissionDialog,
   tail,
 } from './panes.ts'
 
@@ -54,6 +55,7 @@ const TOOLS = [
         text: { type: 'string' },
         enter: { type: 'boolean', description: 'Press Enter after the text' },
         evenIfFocused: { type: 'boolean', description: 'Type into the pane the user is looking at' },
+        userApproved: { type: 'boolean', description: 'The user approved answering the permission dialog this pane shows' },
       },
       required: ['pane', 'text'],
     },
@@ -69,6 +71,7 @@ const TOOLS = [
         key: { type: 'string' },
         modifiers: { type: 'string' },
         evenIfFocused: { type: 'boolean', description: 'Press it in the pane the user is looking at' },
+        userApproved: { type: 'boolean', description: 'The user approved answering the permission dialog this pane shows' },
       },
       required: ['pane', 'key'],
     },
@@ -198,6 +201,14 @@ async function serve($: EngineInterface, name: string, args: Record<string, unkn
   if (name === 'type' || name === 'key') {
     const refusal = refuseInput(pane, frontmost, args.evenIfFocused)
     if (refusal) return reply(refusal, true)
+    if (args.userApproved !== true) {
+      const { text } = (await helper($, { op: 'read', pane: pane.id, scope: 'screen' })) as { text: string }
+      if (showsPermissionDialog(tail(text, 40).text))
+        return reply(
+          'That pane shows a permission dialog, which is the user\'s to answer. Ask them on your board; pass userApproved only once they approved this exact prompt.',
+          true,
+        )
+    }
     if (name === 'type') {
       await helper($, { op: 'type', pane: pane.id, text: String(args.text ?? ''), enter: args.enter === true })
       return reply(`Typed into ${pane.id}${args.enter === true ? ' and pressed Enter' : ''}.`)

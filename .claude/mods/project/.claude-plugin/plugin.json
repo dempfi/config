@@ -1,0 +1,1 @@
+{ "name": "project", "version": "0.1.0", "description": "Turns a session into a project lead that interviews you, then runs real Claude sessions as its workers", "types": "./types/index.d.ts" }

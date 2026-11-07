@@ -83,6 +83,12 @@ export function isUnderTheUser(pane: Pane, frontmost: boolean) {
   return frontmost && pane.isFront
 }
 
+const PERMISSION_DIALOG = /Do you want to [^\n?]*\?\s*\n(?:[^\n]*\n){0,3}?\s*(?:❯\s*)?1\.\s*Yes/
+
+export function showsPermissionDialog(screen: string) {
+  return PERMISSION_DIALOG.test(screen)
+}
+
 export function tail(text: string, lines: number) {
   const rows = text.replace(/\s+$/, '').split('\n')
   const kept = rows.slice(-lines)
