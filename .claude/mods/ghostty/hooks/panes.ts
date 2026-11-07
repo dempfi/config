@@ -121,11 +121,15 @@ function sidebarColumn(lines: string[][]) {
   return best !== null && filled > 0 && most / filled >= SIDEBAR_SHARE ? best : null
 }
 
+function cells(line: string) {
+  return line.match(/\P{M}\p{M}*/gu) ?? []
+}
+
 export function clean(text: string) {
-  const lines = text.split('\n').map(line => [...line.replace(IMAGE_CELLS, '[image]')])
+  const lines = text.split('\n').map(cells)
   const cut = sidebarColumn(lines)
   const kept = lines
-    .map(chars => (cut === null ? chars : chars.slice(0, cut)).join('').trimEnd())
+    .map(row => (cut === null ? row : row.slice(0, cut)).join('').replace(IMAGE_CELLS, '[image]').trimEnd())
     .filter(line => !CHROME.some(pattern => pattern.test(line)))
   return kept
     .join('\n')

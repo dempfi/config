@@ -232,26 +232,88 @@ export function isPlotted(spec: ChartSpec) {
   return spec.kind === 'line' || spec.kind === 'scatter'
 }
 
+export const GRID_STEPS = 4
+const LABEL_GAP = 2
+const X_TICKS = 5
+
+export function gridRows(rows: number) {
+  const found = new Set<number>()
+  for (let step = 0; step <= GRID_STEPS; step++) found.add(Math.round((step / GRID_STEPS) * (rows - 1)))
+  return [...found].sort((a, b) => a - b)
+}
+
+export function spread(labels: string[], columns: number) {
+  const axis = Array.from({ length: columns }, () => ' ')
+  const count = labels.length
+  if (count === 0 || columns <= 0) return ''
+  const at = (index: number) => (count === 1 ? 0 : Math.round((index / (count - 1)) * (columns - 1)))
+  const place = (text: string, center: number) => {
+    const chars = [...text]
+    const start = Math.max(0, Math.min(columns - chars.length, center - Math.floor(chars.length / 2)))
+    return { start, end: start + chars.length, chars }
+  }
+  const last = labels[count - 1] ?? ''
+  const final = last ? place(last, at(count - 1)) : null
+  let free = 0
+  const write = (slot: ReturnType<typeof place>) => {
+    slot.chars.forEach((char, offset) => {
+      if (slot.start + offset < columns) axis[slot.start + offset] = char
+    })
+  }
+  for (let index = 0; index < count - 1; index++) {
+    const text = labels[index] ?? ''
+    if (!text) continue
+    const slot = place(text, at(index))
+    const clearsLast = !final || slot.end + LABEL_GAP <= final.start
+    if (slot.start >= free && clearsLast) {
+      write(slot)
+      free = slot.end + LABEL_GAP
+    }
+  }
+  if (final) write(final)
+  return axis.join('').trimEnd()
+}
+
+function rowOf(value: number, range: { min: number; max: number }, rows: number) {
+  return Math.round((1 - (value - range.min) / (range.max - range.min || 1)) * (rows - 1))
+}
+
 export function geometry(spec: ChartSpec, width: number) {
   const rows = heightOf(spec)
   const series = spec.series.map((one, index) => ({ color: colorOf(index), points: pointsOf(one) }))
   const all = series.flatMap(one => one.points)
   const yRange = extent(all.map(([, y]) => y))
   const xRange = extent(all.map(([x]) => x))
-  const top = compact(yRange.max)
-  const bottom = compact(yRange.min)
-  const gutter = Math.max([...top].length, [...bottom].length) + 1
-  const columns = Math.max(4, Math.min(255, Math.floor(width) - gutter - 1))
-  const first = spec.labels?.[0] ?? compact(xRange.min)
-  const last = spec.labels?.at(-1) ?? compact(xRange.max)
-  const room = Math.max(1, columns - [...first].length - [...last].length)
+  const grid = gridRows(rows)
+  const yLabels = Array.from({ length: rows }, (_, row) =>
+    grid.includes(row) ? compact(yRange.max - (row / (rows - 1)) * (yRange.max - yRange.min)) : '',
+  )
+  const gutter = Math.max(...yLabels.map(label => [...label].length)) + 1
+
+  const ends: { row: number; text: string; color: string }[] = []
+  for (const one of series) {
+    const last = [...one.points].sort((a, b) => a[0] - b[0]).at(-1)
+    if (!last) continue
+    let row = rowOf(last[1], yRange, rows)
+    while (ends.some(end => end.row === row) && row < rows - 1) row++
+    while (ends.some(end => end.row === row) && row > 0) row--
+    ends.push({ row, text: compact(last[1]), color: one.color })
+  }
+  const endWidth = spec.kind === 'line' ? Math.max(0, ...ends.map(end => [...end.text].length + 1)) : 0
+
+  const columns = Math.max(4, Math.min(255, Math.floor(width) - gutter - 1 - endWidth))
+  const xLabels = spec.labels?.length
+    ? spec.labels
+    : Array.from({ length: X_TICKS }, (_, step) => compact(xRange.min + (step / (X_TICKS - 1)) * (xRange.max - xRange.min)))
   return {
     rows,
     columns,
     gutter,
-    top,
-    bottom,
-    xAxis: first + ' '.repeat(room) + last,
+    yLabels,
+    grid,
+    ends: spec.kind === 'line' ? ends : [],
+    endWidth,
+    xAxis: spread(xLabels, columns),
     series,
     xRange,
     yRange,

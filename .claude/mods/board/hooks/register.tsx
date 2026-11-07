@@ -79,6 +79,8 @@ function plotImage(spec: ChartSpec, width: number) {
     const size = pixelSize(shape.columns, shape.rows)
     const drawn = draw({
       ...size,
+      rows: shape.rows,
+      grid: shape.grid,
       series: shape.series,
       connect: spec.kind === 'line',
       xRange: shape.xRange,
@@ -111,15 +113,12 @@ function chartTree(els: Elements, spec: ChartSpec, width: number, prefix: string
   const Image = 'Image' in els ? els.Image : undefined
   if (!isPlotted(spec) || !Image) return <Box flexDirection="column">{textRows(els, renderChart(spec, width), prefix)}</Box>
   const { shape, image } = plotImage(spec, width)
-  const labels = Array.from({ length: shape.rows }, (_, row) =>
-    row === 0 ? shape.top : row === shape.rows - 1 ? shape.bottom : '',
-  )
   return (
     <Box flexDirection="column">
       {textRows(els, shape.header, `${prefix}h`)}
       <Box flexDirection="row">
         <Box flexDirection="column" width={shape.gutter} flexShrink={0}>
-          {labels.map((label, row) => (
+          {shape.yLabels.map((label, row) => (
             <Text key={`${prefix}y${row}`} dimColor>
               {label.padStart(shape.gutter - 1)}
             </Text>
@@ -134,6 +133,18 @@ function chartTree(els: Elements, spec: ChartSpec, width: number, prefix: string
             alt={`${spec.kind} chart${spec.title ? `: ${spec.title}` : ''}`}
           />
         </Box>
+        {shape.endWidth > 0 && (
+          <Box flexDirection="column" width={shape.endWidth} flexShrink={0}>
+            {Array.from({ length: shape.rows }, (_, row) => {
+              const end = shape.ends.find(one => one.row === row)
+              return (
+                <Text key={`${prefix}e${row}`} color={end?.color} bold={end ? true : undefined}>
+                  {end ? ` ${end.text}` : ' '}
+                </Text>
+              )
+            })}
+          </Box>
+        )}
       </Box>
       <Text dimColor>{' '.repeat(shape.gutter) + shape.xAxis}</Text>
       {textRows(els, shape.footer, `${prefix}f`)}

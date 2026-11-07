@@ -1,6 +1,8 @@
 export type Plot = {
   width: number
   height: number
+  rows: number
+  grid: number[]
   series: { color: string; points: [number, number][] }[]
   connect: boolean
   xRange: { min: number; max: number }
@@ -14,7 +16,6 @@ export const MAX_BYTES = 1_900_000
 const LINE_WIDTH = 2.4
 const DOT_RADIUS = 3.2
 const PAD = 5
-const GRID_LINES = 4
 const GRID = { r: 128, g: 128, b: 128, a: 0.16 }
 
 const MAX_SIDE = 2048
@@ -142,16 +143,17 @@ class Canvas {
 
 export function draw(plot: Plot) {
   const canvas = new Canvas(plot.width, plot.height)
+  const rowHeight = plot.height / Math.max(1, plot.rows)
   const left = PAD
   const right = plot.width - PAD
-  const top = PAD
-  const bottom = plot.height - PAD
+  const top = rowHeight / 2
+  const bottom = plot.height - rowHeight / 2
   const toX = (x: number) => left + ((x - plot.xRange.min) / (plot.xRange.max - plot.xRange.min || 1)) * (right - left)
   const toY = (y: number) => bottom - ((y - plot.yRange.min) / (plot.yRange.max - plot.yRange.min || 1)) * (bottom - top)
   const fromX = (px: number) => plot.xRange.min + ((px - left) / (right - left || 1)) * (plot.xRange.max - plot.xRange.min)
 
-  for (let line = 0; line <= GRID_LINES; line++) {
-    const y = Math.round(top + ((bottom - top) * line) / GRID_LINES)
+  for (const row of plot.grid) {
+    const y = Math.round(top + ((bottom - top) * row) / Math.max(1, plot.rows - 1))
     for (let x = left; x < right; x += 1) if (x % 4 < 2) canvas.blend(x, y, GRID, GRID.a)
   }
 

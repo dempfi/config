@@ -35,6 +35,8 @@ test('the line is drawn opaque in its color, and the sky above it stays transpar
   const image = draw({
     width: 200,
     height: 100,
+    rows: 10,
+    grid: [0, 9],
     series: [{ color: '#ff0000', points: [[0, 5], [10, 5]] }],
     connect: true,
     xRange: { min: 0, max: 10 },
@@ -51,6 +53,8 @@ test('a lone line gets a fill under it that fades toward the axis', async () => 
   const image = draw({
     width: 200,
     height: 100,
+    rows: 10,
+    grid: [0, 9],
     series: [{ color: '#00ff00', points: [[0, 8], [10, 8]] }],
     connect: true,
     xRange: { min: 0, max: 10 },
@@ -66,12 +70,14 @@ test('a scatter draws dots and no line between them', async () => {
   const image = draw({
     width: 200,
     height: 100,
+    rows: 10,
+    grid: [0, 9],
     series: [{ color: '#0000ff', points: [[0, 5], [10, 5]] }],
     connect: false,
     xRange: { min: 0, max: 10 },
     yRange: { min: 0, max: 8 },
   })
-  const row = Math.round(95 - (5 / 8) * 90)
+  const row = Math.round(5 + (1 - 5 / 8) * 90)
   expect(pixel(image, 100, row).a).toBe(0)
   expect(pixel(image, 5, row).a).toBeGreaterThan(0)
 })

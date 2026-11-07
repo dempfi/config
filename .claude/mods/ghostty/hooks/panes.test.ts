@@ -36,6 +36,21 @@ test('a read drops Claude Code chrome: dividers, the token counter, tips and the
   expect(clean(screen)).toBe('⏺ Done.\n❯')
 })
 
+test('rows that hold an image are cut at the sidebar border like every other row', async () => {
+  const cell = '\u{10EEEE}̅̍'
+  const plot = (label: string) => (label.padEnd(6) + cell.repeat(100)).padEnd(6 + 300, ' ')
+  const screen = [
+    '  title'.padEnd(WIDE, ' ') + '│State',
+    plot('760') + ' '.repeat(WIDE - 106) + '│• first note',
+    plot('') + ' '.repeat(WIDE - 106) + '│• second note',
+    row('  Nov 1   Nov 14', ''),
+  ].join('\n')
+  const text = clean(screen)
+  expect(text).toMatch(/760\s+\[image\]/)
+  expect(text).not.toContain('note')
+  expect(text).not.toContain('│')
+})
+
 test('an image on screen reads as one marker, not its placeholder cells', async () => {
   const cell = '\u{10EEEE}̅̍'
   const screen = ['  340 ' + cell.repeat(50), '      ' + cell.repeat(50), '      Oct 24        Nov 6'].join('\n')

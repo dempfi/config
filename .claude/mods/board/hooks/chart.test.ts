@@ -1,5 +1,42 @@
 import { expect, test } from 'claude-code/testing'
-import { colorOf, compact, describe, render, rowWidth, validate } from './chart.ts'
+import { colorOf, compact, describe, geometry, gridRows, render, rowWidth, spread, validate } from './chart.ts'
+
+test('every gridline row carries its value, top to bottom', async () => {
+  const shape = geometry({ kind: 'line', series: [{ values: [0, 100] }], height: 9 }, 80)
+  expect(gridRows(9)).toEqual([0, 2, 4, 6, 8])
+  expect(shape.yLabels.filter(Boolean)).toEqual(['100', '75', '50', '25', '0'])
+})
+
+test('date labels spread across the axis, the last always shows, and none overlap', async () => {
+  const dates = Array.from({ length: 30 }, (_, day) => `Nov ${day + 1}`)
+  const axis = spread(dates, 60)
+  expect(axis.startsWith('Nov 1')).toBe(true)
+  expect(axis.trimEnd().endsWith('Nov 30')).toBe(true)
+  expect(axis).not.toMatch(/Nov \d+Nov/)
+  expect([...axis].length).toBeLessThanOrEqual(60)
+  const shown = axis.match(/Nov \d+/g) ?? []
+  expect(shown.length).toBeGreaterThan(3)
+})
+
+test('a line chart labels each series with its last value at the row it ends on', async () => {
+  const shape = geometry({ kind: 'line', series: [{ values: [0, 100] }, { values: [100, 0] }], height: 5 }, 80)
+  expect(shape.ends.map(end => [end.row, end.text])).toEqual([
+    [0, '100'],
+    [4, '0'],
+  ])
+  expect(shape.ends[0]?.color).toBe(colorOf(0))
+})
+
+test('two series ending on the same row get their labels on different rows', async () => {
+  const shape = geometry({ kind: 'line', series: [{ values: [0, 50] }, { values: [100, 50] }], height: 5 }, 80)
+  const rows = shape.ends.map(end => end.row)
+  expect(new Set(rows).size).toBe(2)
+})
+
+test('the plot, its value gutter and its end labels fit the width given', async () => {
+  const shape = geometry({ kind: 'line', series: [{ values: [1200, 45000] }], height: 5 }, 70)
+  expect(shape.gutter + 1 + shape.columns + shape.endWidth).toBeLessThanOrEqual(70)
+})
 
 const text = (rows: ReturnType<typeof render>) => rows.map(row => row.map(piece => piece.text).join(''))
 
