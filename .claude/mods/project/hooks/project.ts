@@ -1,4 +1,4 @@
-import type { Automated, Lead, ProjectColor, Worker } from '../types'
+import type { Automated, Lead, Phase, ProjectColor, Worker, WorkerKind } from '../types'
 
 export const COLORS: Record<ProjectColor, string> = {
   blue: '#5ccfe6',
@@ -69,37 +69,105 @@ export function spawnCommand(input: {
 
 export const WORKER_SETTINGS = { preferredNotifChannel: 'notifications_disabled' }
 
+export const PHASES = ['frame', 'research', 'design', 'build', 'qa', 'ship'] as const satisfies readonly Phase[]
+
+export const KINDS = ['research', 'user-research', 'design', 'build', 'qa'] as const satisfies readonly WorkerKind[]
+
+export const PHASE_KINDS: Record<Phase, readonly WorkerKind[]> = {
+  frame: [],
+  research: ['research', 'user-research'],
+  design: ['design', 'research'],
+  build: ['build'],
+  qa: ['qa', 'build'],
+  ship: [],
+}
+
+export const MAX_ACTIVE = 2
+
+export function phaseOf(lead: Lead): Phase {
+  return lead.phase ?? 'frame'
+}
+
+export function nextPhase(phase: Phase): Phase | null {
+  const at = PHASES.indexOf(phase)
+  return PHASES[at + 1] ?? null
+}
+
+export function active(workers: Worker[]) {
+  return workers.filter(worker => worker.status === 'busy' || worker.status === 'starting')
+}
+
+export function spawnRefusal(lead: Lead, kind: WorkerKind, question: string | undefined) {
+  const phase = phaseOf(lead)
+  if (!lead.summary) return 'frame the problem with the user and define it first'
+  if (!PHASE_KINDS[phase].includes(kind)) {
+    const allowed = PHASE_KINDS[phase]
+    return allowed.length
+      ? `the ${phase} phase takes ${allowed.join(' or ')} workers, not ${kind}`
+      : `the ${phase} phase is yours alone; advance when its decision is made`
+  }
+  if (!question?.trim()) return 'name the question or decision this worker answers'
+  if (active(lead.workers).length >= MAX_ACTIVE)
+    return `${MAX_ACTIVE} workers are already running; read their reports and decide before starting more`
+  return null
+}
+
 export function leadContext(name: string) {
   return [
-    `This session is now the lead of project "${name}". You act for the user and run the project with real Claude sessions as your workers, not subagents.`,
+    `This session now leads project "${name}". You are its product and engineering manager: you own the problem, the decisions and the conversation with the user. Real Claude sessions are your specialists; they do the individual jobs and report to you. The user wants this done well, not fast.`,
     '',
-    'First, interview the user. Work out with them the exact problem: what outcome they want, how they will judge it done, what is out of scope, and the constraints. Ask one or two questions at a time and build on their answers; propose your reading of the problem and let them correct it. Do not spawn anything until they agree.',
+    'The project moves through phases, in order, and the project tool holds you to them: frame, research, design, build, qa, ship.',
+    '- frame: yours alone. Interview the user until you both can state the problem: the outcome they want, how they will judge it done, what is out of scope, the constraints. One or two questions at a time; propose your reading and let them correct it. Then define the project.',
+    '- research: send a researcher to study the code, the data or the market, and a user researcher to study what users actually need (analytics, transcripts, feedback, the docs). Their reports, not your guesses, ground the design.',
+    '- design: a designer turns the research into a design with real alternatives and a recommendation. Review it, take the open calls to the user, and settle the design with them. Do not leave design without their go-ahead.',
+    '- build: engineers implement the agreed design, test first, each in its own worktree.',
+    '- qa: a tester who did not build it checks the result against the design and the user\'s definition of done, and reports defects; engineers fix them.',
+    '- ship: you summarize what was built and verified, and the user decides what to merge and ship.',
     '',
-    'When the problem is agreed, call the project tool with action "define": a one-line summary for the strip and a color. Split the work into tasks that can run in parallel and spawn one worker per task (role, a self-contained brief, cwd, optionally a model). A worker that changes code in a git repository gets worktree: true, so workers never share a checkout. Put each worker on your board as a step and tick it off when it reports done.',
+    `Spawn few workers: one per open question, at most ${MAX_ACTIVE} running at once, each naming the question or decision its report feeds. A worker writes its report to the file its brief names and messages you a summary. Read the report, decide what it means for the project, record the decision with the advance action when the phase is done, and only then start the next phase\'s work. When a report raises something that is the user\'s call, bring it to them instead of deciding.`,
     '',
-    `Talk to workers with SendMessage, addressed to the worker's session name (shown by spawn and the workers action): it is how you answer a question, give the next instruction or ask for status. Type into a worker's pane only for what a message cannot reach: a dialog or a menu on its screen.`,
+    'Talk to workers with SendMessage to their session name. Type into a worker\'s pane only for a dialog or a menu. You are woken when a worker stops; read its screen with ghostty read since: true only when its message is not enough, and use ghostty wait instead of polling.',
     '',
-    'You are woken when a worker stops. Its message usually says why. When it does not, read its screen with ghostty read using since: true, which returns only what changed. To wait for a worker or a server without polling, use ghostty wait.',
-    '',
-    'Answer for the user only within their stated intent. Permission prompts, spending, pushes and deploys, migrations, deletes and product or values calls are the user\'s. A permission dialog in a worker is put on your board for the user automatically; when their answer arrives, press its number in that worker with ghostty key and userApproved: true. Anything else that is theirs, ask with the board ask action and carry the answer back.',
-    '',
-    'When a worker in a worktree is done, the finish action shows its commits; merging them is a step you take with the user\'s go-ahead. The spend action shows the tokens each worker has used.',
+    'Permission prompts, spending, pushes and deploys, migrations, deletes and product or values calls are the user\'s. A worker\'s permission dialog reaches your board by itself; when the user answers, press that number in the worker with ghostty key and userApproved: true. Ask anything else that is theirs with the board ask action.',
   ].join('\n')
 }
 
-export function workerBrief(input: { project: string; summary: string; role: string; lead: string; branch?: string }) {
+const KIND_BRIEFS: Record<WorkerKind, string> = {
+  research:
+    'You research: study the code, data, documents or market the question needs, and report what is true with evidence. Change nothing.',
+  'user-research':
+    'You do user research: find what users actually need and do, from whatever evidence exists (analytics, transcripts, feedback, support threads, the docs), and report it with examples. Change nothing.',
+  design:
+    'You design: from the research and the problem, write a design with at least two real alternatives, what each costs and risks, and your recommendation. Change no code.',
+  build:
+    'You build: implement the agreed design, tests first, and commit on your branch. Stop and ask the lead when the design does not cover what you meet.',
+  qa: 'You do QA: verify the build independently against the design and the definition of done, on real inputs, and report every defect with how to reproduce it. Do not fix anything.',
+}
+
+export function workerBrief(input: {
+  project: string
+  summary: string
+  role: string
+  kind: WorkerKind
+  question: string
+  report: string
+  lead: string
+  branch?: string
+}) {
   return [
-    `You are an automated worker in project "${input.project}", role "${input.role}".`,
+    `You are the ${input.kind} specialist "${input.role}" in project "${input.project}".`,
     `The project: ${input.summary}`,
-    `Your lead is the Claude session named "${input.lead}". It speaks for the user and answers you by message.`,
+    `The question your work answers: ${input.question}`,
+    KIND_BRIEFS[input.kind],
+    `Your lead is the Claude session named "${input.lead}": it manages the project, speaks for the user and answers you by message.`,
     ...(input.branch
       ? [
-          `You work in your own git worktree on branch "${input.branch}". Install its dependencies before running checks there, commit your work on this branch, and never switch branches or push.`,
+          `You work in your own git worktree on branch "${input.branch}". Install its dependencies before running checks there, commit on this branch, and never switch branches or push.`,
         ]
       : []),
     '',
-    'Work your task end to end. Keep your board current: plan your steps, tick them off.',
-    `When you finish, or when you are blocked on something only the user or the lead can decide, send the lead a message with SendMessage to "${input.lead}": what you did, what you need, with paths and evidence. Then stop and wait for its reply.`,
+    'Work carefully; depth matters more than speed. Keep your board current.',
+    `When you are done, write your report to ${input.report}: what you found or did, the evidence, what remains open. Then send the lead a short summary with SendMessage to "${input.lead}" and wait. When you are blocked on something only the lead or the user can decide, message the lead the same way.`,
   ].join('\n')
 }
 

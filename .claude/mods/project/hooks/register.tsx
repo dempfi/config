@@ -13,7 +13,13 @@ import {
   pickColor,
   slug,
   spawnCommand,
+  spawnRefusal,
   WORKER_SETTINGS,
+  KINDS,
+  MAX_ACTIVE,
+  active,
+  nextPhase,
+  phaseOf,
   workerBrief,
 } from './project.ts'
 import { BLACK, SIDE, type Run, hazard } from './tape.ts'
@@ -23,16 +29,17 @@ const automatedAtom = atom({ plugin: 'project', key: 'automated' } as const, nul
 
 const TOOL = 'mcp__project__project' as const
 const POLL_MS = 5000
-const ACTIONS = ['define', 'spawn', 'workers', 'finish', 'close', 'spend'] as const satisfies readonly ProjectAction[]
+const ACTIONS = ['define', 'spawn', 'advance', 'workers', 'finish', 'close', 'spend'] as const satisfies readonly ProjectAction[]
 
 let poller: Timer | undefined
 let isTicking = false
 
 const DESCRIPTION = [
-  'Runs the project this session leads (started with /project <name>).',
-  `define {summary, color}: once the problem is agreed; color is one of ${COLOR_NAMES.join(', ')}.`,
-  'spawn {role, task, cwd?, model?, worktree?}: a Claude session in a new tab for one self-contained task; worktree: true gives it its own git worktree and branch.',
-  'workers: each worker with status. finish {role}: a worktree worker\'s commits and diffstat. close {role}: closes its tab and removes a merged, clean worktree. spend: tokens per worker, pinned to the board.',
+  'Runs the project this session leads (started with /project <name>), phase by phase: frame, research, design, build, qa, ship.',
+  `define {summary, color}: the agreed problem, ending frame; color is one of ${COLOR_NAMES.join(', ')}.`,
+  `spawn {kind, role, question, task, cwd?, model?, worktree?}: one specialist (${KINDS.join(', ')}) the current phase takes, for the question its report answers; at most ${MAX_ACTIVE} run at once. worktree: true for code changes.`,
+  'advance {decision}: record what the phase decided and move to the next; build and ship need the user\'s go-ahead first.',
+  'workers: status and report paths. finish {role}: a worktree\'s commits. close {role}: ends a worker, removing a merged, clean worktree. spend: tokens per worker.',
 ].join('\n')
 
 const SCHEMA = {
@@ -41,11 +48,14 @@ const SCHEMA = {
     action: { type: 'string', enum: [...ACTIONS] },
     summary: { type: 'string' },
     color: { type: 'string', enum: COLOR_NAMES },
+    kind: { type: 'string', enum: [...KINDS] },
     role: { type: 'string' },
+    question: { type: 'string' },
     task: { type: 'string' },
     cwd: { type: 'string' },
     model: { type: 'string' },
     worktree: { type: 'boolean' },
+    decision: { type: 'string' },
   },
   required: ['action'],
 }
@@ -175,7 +185,12 @@ async function ghostty($: EngineInterface, name: 'open' | 'close' | 'tab' | 'rea
 }
 
 async function spawn($: EngineInterface, lead: Lead, request: ProjectRequest) {
-  if (!lead.summary) throw new Error('define the problem with the user first')
+  const kind = request.kind
+  if (!kind || !(KINDS as readonly string[]).includes(kind)) throw new Error(`spawn needs a kind: ${KINDS.join(', ')}`)
+  const refusal = spawnRefusal({ ...lead, workers: await refreshed($, lead) }, kind, request.question)
+  if (refusal) throw new Error(refusal)
+  const summary = lead.summary ?? ''
+  const question = request.question?.trim() ?? ''
   const role = slug(request.role ?? '')
   if (!role) throw new Error('spawn needs a role')
   if (lead.workers.some(worker => worker.role === role)) throw new Error(`a worker "${role}" already runs`)
@@ -196,9 +211,19 @@ async function spawn($: EngineInterface, lead: Lead, request: ProjectRequest) {
   const automated: Automated = { project: lead.name, role, color: lead.color, lead: leadName }
   const briefPath = `${dir}/brief.md`
   const taskPath = `${dir}/task.md`
+  const report = `${dir}/report.md`
   await $.fs.write(
     briefPath,
-    workerBrief({ project: lead.name, summary: lead.summary, role, lead: leadName, ...(worktree ? { branch: worktree.branch } : {}) }),
+    workerBrief({
+      project: lead.name,
+      summary,
+      role,
+      kind,
+      question,
+      report,
+      lead: leadName,
+      ...(worktree ? { branch: worktree.branch } : {}),
+    }),
   )
   await $.fs.write(taskPath, task)
   const settingsPath = `${dir}/settings.json`
@@ -216,12 +241,14 @@ async function spawn($: EngineInterface, lead: Lead, request: ProjectRequest) {
     sessionId,
     name: sessionName,
     cwd,
+    kind,
+    report,
     status: 'starting',
     ...(pane ? { pane } : {}),
     ...(worktree ? { worktree } : {}),
   }
   await saveLead($, { ...lead, workers: [...lead.workers, worker] })
-  return `Spawned ${sessionName} in ${cwd}${worktree ? ` on ${worktree.branch}` : ''}`
+  return `Spawned ${sessionName} (${kind}); report at ${report}${worktree ? `; branch ${worktree.branch}` : ''}`
 }
 
 async function git($: EngineInterface, args: string[]) {
@@ -275,21 +302,38 @@ async function serve($: EngineInterface, request: ProjectRequest) {
     const summary = request.summary?.trim()
     if (!summary) throw new Error('define needs a summary')
     const color = isColor(request.color) ? request.color : lead.color
-    await saveLead($, { ...lead, summary, color })
+    const isFraming = phaseOf(lead) === 'frame'
+    const decisions = isFraming ? [...(lead.decisions ?? []), { phase: 'frame' as const, text: summary }] : lead.decisions
+    await saveLead($, { ...lead, summary, color, phase: isFraming ? 'research' : phaseOf(lead), ...(decisions ? { decisions } : {}) })
     await markTab($, await ownName($), `${lead.name} · lead`, color)
     for (const worker of lead.workers) if (worker.pane) await markTab($, worker.pane, `${lead.name} · ${worker.role}`, color)
-    return `Defined, ${color}`
+    return `Defined, ${color}; phase ${isFraming ? 'research' : phaseOf(lead)}`
   }
 
   if (request.action === 'spawn') return spawn($, lead, request)
 
+  if (request.action === 'advance') {
+    const decision = request.decision?.trim()
+    if (!decision) throw new Error('advance needs the decision this phase reached')
+    const from = phaseOf(lead)
+    const to = nextPhase(from)
+    if (!to) throw new Error('the project is at ship; the user decides what happens next')
+    if (from === 'frame') throw new Error('define the problem to leave frame')
+    const running = active(await refreshed($, lead))
+    if (running.length > 0) throw new Error(`${running.map(worker => worker.role).join(', ')} still working; wait for their reports`)
+    await saveLead($, { ...lead, phase: to, decisions: [...(lead.decisions ?? []), { phase: from, text: decision }] })
+    return `Phase ${to}`
+  }
+
   if (request.action === 'workers') {
     const workers = await refreshed($, lead)
     await saveLead($, { ...lead, workers })
-    if (workers.length === 0) return 'No workers yet.'
-    return workers
-      .map(worker => `${worker.role}: session ${worker.name}, ${worker.status}, pane ${worker.pane ?? 'unknown'}, ${worker.cwd}`)
-      .join('\n')
+    const head = `phase ${phaseOf(lead)}`
+    if (workers.length === 0) return `${head}; no workers yet`
+    return [
+      head,
+      ...workers.map(worker => `${worker.name} ${worker.kind ?? ''} ${worker.status}${worker.report ? ` report ${worker.report}` : ''}`),
+    ].join('\n')
   }
 
   if (request.action === 'spend') {
@@ -480,9 +524,9 @@ export const register: Register = on => {
       const strip = (
         <Box key="project-strip" flexDirection="row" height={1} backgroundColor={color}>
           <Text color={BLACK} backgroundColor={color} bold wrap="truncate-end">
-            {` ◆ ${lead.name.toUpperCase()}  `}
+            {` ◆ ${lead.name.toUpperCase()} · ${phaseOf(lead).toUpperCase()}  `}
             <Text color={BLACK} backgroundColor={color}>
-              {lead.summary ?? 'defining the problem with you'}
+              {lead.summary ?? 'framing the problem with you'}
             </Text>
           </Text>
           <Box flexGrow={1} />

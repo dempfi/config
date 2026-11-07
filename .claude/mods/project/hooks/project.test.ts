@@ -2,7 +2,11 @@ import { expect, test } from 'claude-code/testing'
 import type { Lead, Worker } from '../types'
 import {
   COLOR_NAMES,
+  MAX_ACTIVE,
+  PHASES,
   counts,
+  nextPhase,
+  spawnRefusal,
   dialogExcerpt,
   digest,
   needsAttention,
@@ -71,10 +75,47 @@ test('a worker starting up does not wake the lead until it has worked', async ()
   expect(needsAttention([worker('api', 'starting')], [worker('api', 'idle')])).toEqual([])
 })
 
-test('the worker brief names the lead it reports to', async () => {
-  const brief = workerBrief({ project: 'billing', summary: 'Move billing to passes', role: 'api', lead: 'acme-b6' })
+test('the worker brief names its lead, its question and where its report goes', async () => {
+  const brief = workerBrief({
+    project: 'billing',
+    summary: 'Move billing to passes',
+    role: 'users',
+    kind: 'user-research',
+    question: 'Which passes do buyers pick?',
+    report: '/r/report.md',
+    lead: 'acme-b6',
+  })
   expect(brief).toContain('SendMessage to "acme-b6"')
-  expect(brief).toContain('Move billing to passes')
+  expect(brief).toContain('Which passes do buyers pick?')
+  expect(brief).toContain('/r/report.md')
+})
+
+const framed: Lead = { name: 'billing', color: 'blue', summary: 'Move billing to passes', phase: 'research', workers: [] }
+
+test('nothing is spawned before the problem is framed with the user', async () => {
+  expect(spawnRefusal({ name: 'b', color: 'blue', workers: [] }, 'research', 'q')).not.toBe(null)
+})
+
+test('a phase takes only its own kinds of specialist', async () => {
+  expect(spawnRefusal(framed, 'user-research', 'q')).toBe(null)
+  expect(spawnRefusal(framed, 'build', 'q')).toContain('research')
+  expect(spawnRefusal({ ...framed, phase: 'build' }, 'build', 'q')).toBe(null)
+  expect(spawnRefusal({ ...framed, phase: 'qa' }, 'qa', 'q')).toBe(null)
+  expect(spawnRefusal({ ...framed, phase: 'ship' }, 'qa', 'q')).not.toBe(null)
+})
+
+test('every specialist must name the question its report answers', async () => {
+  expect(spawnRefusal(framed, 'research', '  ')).toContain('question')
+})
+
+test('no more specialists start while the limit is running', async () => {
+  const running = Array.from({ length: MAX_ACTIVE }, (_, i) => worker(`r${i}`, 'busy'))
+  expect(spawnRefusal({ ...framed, workers: running }, 'research', 'q')).toContain('running')
+  expect(spawnRefusal({ ...framed, workers: running.map(one => ({ ...one, status: 'idle' })) }, 'research', 'q')).toBe(null)
+})
+
+test('phases run in order and end at ship', async () => {
+  expect(PHASES.map(phase => nextPhase(phase))).toEqual(['research', 'design', 'build', 'qa', 'ship', null])
 })
 
 test('a permission dialog on a worker screen becomes a board question with its own options', async () => {
