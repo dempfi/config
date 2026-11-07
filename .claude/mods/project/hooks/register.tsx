@@ -13,6 +13,7 @@ import {
   pickColor,
   slug,
   spawnCommand,
+  WORKER_SETTINGS,
   workerBrief,
 } from './project.ts'
 import { BLACK, SIDE, type Run, hazard } from './tape.ts'
@@ -200,10 +201,12 @@ async function spawn($: EngineInterface, lead: Lead, request: ProjectRequest) {
     workerBrief({ project: lead.name, summary: lead.summary, role, lead: leadName, ...(worktree ? { branch: worktree.branch } : {}) }),
   )
   await $.fs.write(taskPath, task)
+  const settingsPath = `${dir}/settings.json`
+  await $.fs.write(settingsPath, JSON.stringify(WORKER_SETTINGS))
 
   const sessionId = await uuid($)
   const sessionName = `${lead.name}-${role}`
-  const command = spawnCommand({ sessionId, sessionName, briefPath, taskPath, model: request.model, automated })
+  const command = spawnCommand({ sessionId, sessionName, briefPath, taskPath, settingsPath, model: request.model, automated })
   const opened = await ghostty($, 'open', { where: 'tab', cwd, command, title: `${lead.name} · ${role}` })
   const pane = /pane ([0-9A-Fa-f-]{36})/.exec(opened)?.[1]
   if (pane) await markTab($, pane, `${lead.name} · ${role}`, lead.color)

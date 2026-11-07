@@ -42,6 +42,7 @@ export function spawnCommand(input: {
   sessionName: string
   briefPath: string
   taskPath: string
+  settingsPath: string
   model?: string
   automated: Automated
 }) {
@@ -58,11 +59,15 @@ export function spawnCommand(input: {
     shellWord(input.sessionName),
     '--append-system-prompt-file',
     shellWord(input.briefPath),
+    '--settings',
+    shellWord(input.settingsPath),
     ...(input.model ? ['--model', shellWord(input.model)] : []),
   ]
   const prompt = `'Your task is in ${shellWord(input.taskPath)} - read it and start.'`
   return ['env', ...env, 'claude', ...flags, prompt].join(' ')
 }
+
+export const WORKER_SETTINGS = { preferredNotifChannel: 'notifications_disabled' }
 
 export function leadContext(name: string) {
   return [

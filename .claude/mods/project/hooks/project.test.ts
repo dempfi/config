@@ -1,6 +1,17 @@
 import { expect, test } from 'claude-code/testing'
 import type { Lead, Worker } from '../types'
-import { COLOR_NAMES, counts, dialogExcerpt, digest, needsAttention, pickColor, slug, spawnCommand, workerBrief } from './project.ts'
+import {
+  COLOR_NAMES,
+  WORKER_SETTINGS,
+  counts,
+  dialogExcerpt,
+  digest,
+  needsAttention,
+  pickColor,
+  slug,
+  spawnCommand,
+  workerBrief,
+} from './project.ts'
 import { SLANT, hazard } from './tape.ts'
 
 function worker(role: string, status: string): Worker {
@@ -23,6 +34,7 @@ test('the spawn command tags the worker, names its session and points it at its 
     sessionName: 'billing-api',
     briefPath: '/Users/me/.claude/project-runs/billing/api/brief.md',
     taskPath: '/Users/me/.claude/project-runs/billing/api/task.md',
+    settingsPath: '/Users/me/.claude/project-runs/billing/api/settings.json',
     model: 'sonnet',
     automated: { project: 'billing', role: 'api', color: 'blue', lead: 'acme-b6' },
   })
@@ -31,6 +43,7 @@ test('the spawn command tags the worker, names its session and points it at its 
   expect(command).toContain('-n billing-api')
   expect(command).toContain('--append-system-prompt-file /Users/me/.claude/project-runs/billing/api/brief.md')
   expect(command).toContain('--model sonnet')
+  expect(command).toContain('--settings /Users/me/.claude/project-runs/billing/api/settings.json')
   expect(command.endsWith("'Your task is in /Users/me/.claude/project-runs/billing/api/task.md - read it and start.'")).toBe(
     true,
   )
@@ -43,6 +56,7 @@ test('nothing that would need shell quoting reaches the command line', async () 
       sessionName: 'a b',
       briefPath: '/b',
       taskPath: '/t',
+      settingsPath: '/s',
       automated: { project: 'p', role: 'r', color: 'blue', lead: 'l' },
     }),
   ).toThrow()
@@ -87,6 +101,10 @@ test('the lead is told which stopped workers have a dialog waiting on the user',
   const text = digest(lead, [worker('api', 'busy'), worker('docs', 'idle')], ['api'])
   expect(text).toContain('p-api is busy; its permission dialog is on your board')
   expect(text).toContain('p-docs is idle')
+})
+
+test('a worker sends the user no notifications; its lead does that', async () => {
+  expect(WORKER_SETTINGS.preferredNotifChannel).toBe('notifications_disabled')
 })
 
 test('the strip counts working and waiting sessions', async () => {
