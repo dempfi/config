@@ -1,6 +1,7 @@
 {
   "env": {
-    "AGENT_BROWSER_SESSION": "claude"
+    "AGENT_BROWSER_SESSION": "claude",
+    "CLAUDE_CODE_PLUGIN_DIRS": "__HOME__/.claude/mods/inline-images:__HOME__/.claude/mods/ghostty"
   },
   "attribution": {
     "commit": "",

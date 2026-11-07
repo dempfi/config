@@ -79,6 +79,19 @@ listing them again would install a second copy that shadows the plugin's.
 A hook that crashes fails open, so each one coerces its inputs and exits 0 on anything it cannot
 parse. Changing that means the guard silently stops guarding.
 
+- `.claude/mods/` - Claude Code mods, loaded into every session through `CLAUDE_CODE_PLUGIN_DIRS`
+  in the tracked settings. They make the terminal do what the desktop app would otherwise be
+  needed for, and they depend on Ghostty:
+  - **inline-images** draws every image an answer names (an absolute path or a `file://` link) and
+    every image a Read call opens, inline under the message, through Ghostty's image protocol.
+  - **ghostty** gives Claude tools to list Ghostty panes, each matched to the Claude session
+    running in it, read a pane's screen or scrollback, type and press keys in it, open splits,
+    tabs and windows, focus and close panes. Typing is refused in the pane Claude runs in and in
+    the pane in front of the user, so it never writes into a prompt someone is typing in.
+    Reading a pane passes through the clipboard and puts its contents back.
+
+  `claude plugin test .claude/mods/<mod>` runs a mod's tests.
+
 ### Fish Shell Functions
 
 The Fish prompt system in `.config/fish/functions/` uses interconnected git helper functions:

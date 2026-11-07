@@ -1,0 +1,1 @@
+{ "name": "ghostty", "version": "0.1.0", "description": "Lists, reads, types into, opens and focuses Ghostty panes, each matched to the Claude session it runs" }
