@@ -17,7 +17,7 @@ export type Item = {
 
 export type Board = { nextId: number; items: Item[] }
 
-export type BoardAction = 'plan' | 'add' | 'start' | 'done' | 'ask' | 'note' | 'remove' | 'clear_done'
+export type BoardAction = 'plan' | 'add' | 'start' | 'done' | 'ask' | 'note' | 'remove' | 'clear_done' | 'show'
 
 export type BoardRequest = {
   action: BoardAction

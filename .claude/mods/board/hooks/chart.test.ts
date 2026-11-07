@@ -1,72 +1,9 @@
 import { expect, test } from 'claude-code/testing'
-import { barGeometry, colorOf, compact, describe, geometry, gridRows, render, rowWidth, spread, validate } from './chart.ts'
-
-test('bar labels sit centred under their bars', async () => {
-  const shape = barGeometry({ kind: 'bar', series: [{ values: [1, 2, 3, 4] }], labels: ['a', 'b', 'c', 'd'] }, 45)
-  if (shape.isHorizontal) throw new Error('vertical expected')
-  const slot = shape.columns / 4
-  const axis = [...shape.xAxis]
-  ;['a', 'b', 'c', 'd'].forEach((label, index) => {
-    expect(Math.abs(axis.indexOf(label) - ((index + 0.5) * slot - 0.5))).toBeLessThanOrEqual(1)
-  })
-})
-
-test('a bar chart measures from zero, so its bottom gridline reads 0', async () => {
-  const shape = barGeometry({ kind: 'bar', series: [{ values: [40, 80] }], height: 5 }, 40)
-  if (shape.isHorizontal) throw new Error('vertical expected')
-  expect(shape.yLabels[0]).toBe('80')
-  expect(shape.yLabels.at(-1)).toBe('0')
-})
-
-test('horizontal bars give each bar a row, its label on the left and its value on the right', async () => {
-  const shape = barGeometry({ kind: 'hbar', series: [{ values: [939, 195] }], labels: ['board', 'inline-images'] }, 60)
-  if (!shape.isHorizontal) throw new Error('horizontal expected')
-  expect(shape.rows).toBe(2)
-  expect(shape.labels).toEqual(['        board', 'inline-images'])
-  expect(shape.numbers).toEqual(['939', '195'])
-  expect([...shape.labels[0] ?? ''].length + 1 + shape.columns + 1 + 3).toBeLessThanOrEqual(60)
-})
-
-test('every gridline row carries its value, top to bottom', async () => {
-  const shape = geometry({ kind: 'line', series: [{ values: [0, 100] }], height: 9 }, 80)
-  expect(gridRows(9)).toEqual([0, 2, 4, 6, 8])
-  expect(shape.yLabels.filter(Boolean)).toEqual(['100', '75', '50', '25', '0'])
-})
-
-test('date labels spread across the axis, the last always shows, and none overlap', async () => {
-  const dates = Array.from({ length: 30 }, (_, day) => `Nov ${day + 1}`)
-  const axis = spread(dates, 60)
-  expect(axis.startsWith('Nov 1')).toBe(true)
-  expect(axis.trimEnd().endsWith('Nov 30')).toBe(true)
-  expect(axis).not.toMatch(/Nov \d+Nov/)
-  expect([...axis].length).toBeLessThanOrEqual(60)
-  const shown = axis.match(/Nov \d+/g) ?? []
-  expect(shown.length).toBeGreaterThan(3)
-})
-
-test('a line chart labels each series with its last value at the row it ends on', async () => {
-  const shape = geometry({ kind: 'line', series: [{ values: [0, 100] }, { values: [100, 0] }], height: 5 }, 80)
-  expect(shape.ends.map(end => [end.row, end.text])).toEqual([
-    [0, '100'],
-    [4, '0'],
-  ])
-  expect(shape.ends[0]?.color).toBe(colorOf(0))
-})
-
-test('two series ending on the same row get their labels on different rows', async () => {
-  const shape = geometry({ kind: 'line', series: [{ values: [0, 50] }, { values: [100, 50] }], height: 5 }, 80)
-  const rows = shape.ends.map(end => end.row)
-  expect(new Set(rows).size).toBe(2)
-})
-
-test('the plot, its value gutter and its end labels fit the width given', async () => {
-  const shape = geometry({ kind: 'line', series: [{ values: [1200, 45000] }], height: 5 }, 70)
-  expect(shape.gutter + 1 + shape.columns + shape.endWidth).toBeLessThanOrEqual(70)
-})
+import { colorOf, compact, describe, render, rowWidth, validate } from './chart.ts'
 
 const text = (rows: ReturnType<typeof render>) => rows.map(row => row.map(piece => piece.text).join(''))
 
-test('no chart row is wider than the room it was given', async () => {
+test('no text chart row is wider than the room it was given', async () => {
   const series = [{ name: 'p95', values: [120, 180, 90, 480, 300, 250, 410] }, { name: 'p50', values: [40, 60, 50, 90, 80, 70, 65] }]
   for (const kind of ['line', 'scatter', 'bar', 'hbar', 'sparkline'] as const) {
     for (const width of [20, 47, 90]) {
@@ -74,35 +11,6 @@ test('no chart row is wider than the room it was given', async () => {
       for (const row of rows) expect(rowWidth(row)).toBeLessThanOrEqual(width)
     }
   }
-})
-
-test('a rising line puts its first dot at the bottom left and its last at the top right', async () => {
-  const rows = render({ kind: 'line', series: [{ values: [0, 1, 2, 3, 4, 5, 6, 7] }], height: 4 }, 30)
-  const plot = text(rows).slice(0, 4).map(line => line.slice(line.indexOf('│') + 1))
-  expect(plot[3]?.[0]).not.toBe('⠀')
-  expect(plot[0]?.at(-1)).not.toBe('⠀')
-  expect(plot[0]?.[0]).toBe('⠀')
-})
-
-test('the y axis is labelled with the top and bottom of the data', async () => {
-  const lines = text(render({ kind: 'line', series: [{ values: [3, 1200, 40] }], height: 5 }, 40))
-  expect(lines[0]?.trimStart().startsWith('1200')).toBe(true)
-  expect(lines[4]?.trimStart().startsWith('3')).toBe(true)
-})
-
-test('the tallest bar fills the full height and a zero bar draws nothing', async () => {
-  const lines = text(render({ kind: 'bar', series: [{ values: [0, 10] }], height: 3 }, 20))
-  const plots = lines.slice(0, 3).map(line => line.slice(line.indexOf('│') + 1))
-  expect(plots.every(line => line.includes('█'))).toBe(true)
-  expect(plots.every(line => line.trimStart().startsWith('█'))).toBe(true)
-})
-
-test('horizontal bars scale to the largest value and show each value', async () => {
-  const lines = text(render({ kind: 'hbar', series: [{ values: [50, 100] }], labels: ['half', 'full'] }, 40))
-  const half = (lines[0]?.match(/█/g) ?? []).length
-  const full = (lines[1]?.match(/█/g) ?? []).length
-  expect(Math.abs(full - half * 2)).toBeLessThanOrEqual(1)
-  expect(lines[1]?.endsWith('100')).toBe(true)
 })
 
 test('a sparkline climbs from the lowest block to the highest', async () => {
@@ -133,5 +41,5 @@ test('a chart with no data or an unknown kind is refused', async () => {
 })
 
 test('the model is told the range of what it drew', async () => {
-  expect(describe({ kind: 'bar', title: 'cost', series: [{ name: 'usd', values: [3, 9, 1] }] })).toContain('usd: 3 points, 1 to 9')
+  expect(describe({ kind: 'bar', title: 'cost', series: [{ name: 'usd', values: [3, 9, 1] }] })).toBe('Drawn: usd 1–9')
 })

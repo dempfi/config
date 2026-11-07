@@ -13,82 +13,76 @@ import {
   tail,
 } from './panes.ts'
 
-const TOOL = (name: string) => `mcp__ghostty__${name}`
+const PREFIX = 'mcp__ghostty__'
+const TOOL = (name: string) => `${PREFIX}${name}`
 const READ_ONLY = new Set([TOOL('panes'), TOOL('read')])
 const SPLITS = ['right', 'down', 'left', 'up'] as const
 const PLACES = ['tab', 'window', ...SPLITS] as const
 
-const PANE = {
-  type: 'string',
-  description: 'A pane id, its tty (ttys002), or the name or id of the Claude session running in it',
-}
+const PANE = { type: 'string', description: 'tty (ttys002), Claude session name, or pane id' }
 
 const TOOLS = [
   {
     name: 'panes',
     description:
-      'Lists every Ghostty pane: id, tty, window and tab, what runs in it (a Claude session with its name and busy/idle status, or the foreground program), title and working directory. The pane marked "this session" is the one you run in.',
+      'Ghostty panes, one per line: tty, what runs there (Claude session and status, or the program), w<window>t<tab> (* in front), title, and the cwd when it differs from yours.',
     inputSchema: { type: 'object', properties: {} },
     isDeferred: false,
   },
   {
     name: 'read',
-    description:
-      "Reads the text a Ghostty pane shows: the visible screen, or the scrollback for what scrolled off. Use it to see another Claude session's screen, a dev server's log, or a prompt waiting for an answer.",
+    description: "A pane's screen, or its scrollback, cleaned of padding, sidebars and images.",
     inputSchema: {
       type: 'object',
       properties: {
         pane: PANE,
-        scope: { type: 'string', enum: ['screen', 'scrollback'], description: 'screen when absent' },
-        lines: { type: 'number', description: 'How many of the last lines to return; 60 when absent' },
+        scope: { type: 'string', enum: ['screen', 'scrollback'] },
+        lines: { type: 'number', description: 'last lines; 60 by default' },
       },
       required: ['pane'],
     },
   },
   {
     name: 'type',
-    description:
-      'Types text into a Ghostty pane as a paste, optionally pressing Enter after it. Refuses the pane you run in, and the pane in front of the user unless evenIfFocused is true.',
+    description: "Pastes text into a pane, optionally pressing Enter. Refuses your own pane, and the user's front pane unless evenIfFocused.",
     inputSchema: {
       type: 'object',
       properties: {
         pane: PANE,
         text: { type: 'string' },
-        enter: { type: 'boolean', description: 'Press Enter after the text' },
-        evenIfFocused: { type: 'boolean', description: 'Type into the pane the user is looking at' },
-        userApproved: { type: 'boolean', description: 'The user approved answering the permission dialog this pane shows' },
+        enter: { type: 'boolean' },
+        evenIfFocused: { type: 'boolean' },
+        userApproved: { type: 'boolean', description: 'the user approved the permission dialog on screen' },
       },
       required: ['pane', 'text'],
     },
   },
   {
     name: 'key',
-    description:
-      'Presses one key in a Ghostty pane: enter, escape, tab, up, down, space, a letter or digit, with optional modifiers (shift, control, option, command, comma-separated). Answers a menu or a y/n prompt, or sends ctrl+c with key "c" and modifiers "control".',
+    description: 'Presses one key (enter, escape, tab, up, down, space, a letter) with optional modifiers (shift,control,option,command).',
     inputSchema: {
       type: 'object',
       properties: {
         pane: PANE,
         key: { type: 'string' },
         modifiers: { type: 'string' },
-        evenIfFocused: { type: 'boolean', description: 'Press it in the pane the user is looking at' },
-        userApproved: { type: 'boolean', description: 'The user approved answering the permission dialog this pane shows' },
+        evenIfFocused: { type: 'boolean' },
+        userApproved: { type: 'boolean', description: 'the user approved the permission dialog on screen' },
       },
       required: ['pane', 'key'],
     },
   },
   {
     name: 'open',
-    description:
-      "Opens a Ghostty pane where the user can watch it: a split beside a pane (right, down, left, up), a tab, or a window, in a working directory, optionally running a command in its shell so the pane stays when the command ends. Focus returns to where the user was unless takeFocus is true. Returns the new pane's id.",
+    description: "Opens a split, tab or window the user can watch, optionally running a command in its shell; focus stays with the user unless takeFocus. Returns the new pane's id.",
     inputSchema: {
       type: 'object',
       properties: {
         where: { type: 'string', enum: [...PLACES] },
-        cwd: { type: 'string', description: 'Absolute working directory' },
-        command: { type: 'string', description: 'Typed into the new shell and run' },
-        title: { type: 'string', description: 'A fixed title for the pane' },
-        next: { ...PANE, description: 'The pane to split; the front pane when absent' },
+        cwd: { type: 'string' },
+        command: { type: 'string' },
+        title: { type: 'string' },
+        next: { ...PANE, description: 'pane to split; the front one by default' },
         takeFocus: { type: 'boolean' },
       },
       required: ['where'],
@@ -96,12 +90,12 @@ const TOOLS = [
   },
   {
     name: 'focus',
-    description: "Brings a Ghostty pane to the front, to show the user something that needs them.",
+    description: 'Brings a pane to the front for the user.',
     inputSchema: { type: 'object', properties: { pane: PANE }, required: ['pane'] },
   },
   {
     name: 'close',
-    description: 'Closes a Ghostty pane, ending what runs in it. Refuses the pane you run in.',
+    description: 'Closes a pane and what runs in it; refuses your own.',
     inputSchema: { type: 'object', properties: { pane: PANE }, required: ['pane'] },
   },
 ] as const
@@ -166,8 +160,9 @@ function refuseInput(pane: Pane, frontmost: boolean, evenIfFocused: unknown) {
 async function serve($: EngineInterface, name: string, args: Record<string, unknown>) {
   if (name === 'panes') {
     const { frontmost, panes: all } = await panes($)
-    const header = frontmost ? 'Ghostty is frontmost.' : 'Ghostty is in the background.'
-    return reply([header, ...all.map(describePane)].join('\n'))
+    const cwd = await $.session.cwd()
+    const header = frontmost ? '' : 'Ghostty is in the background.\n'
+    return reply(header + all.map(pane => describePane(pane, cwd)).join('\n'))
   }
 
   if (name === 'open') {
@@ -250,11 +245,10 @@ export const register: Register = on => {
     return next(e)
   })
 
-  for (const tool of TOOLS) {
-    on('tool.call', { tool: TOOL(tool.name) }, async ($, e) => answer($, tool.name, e as Record<string, unknown>)).catch(
-      () => reply('the ghostty tool failed', true),
-    )
-  }
+  on('tool.call', { tool: /^mcp__ghostty__/ }, async ($, e) => {
+    const call = e as Record<string, unknown>
+    return answer($, String(call.tool).slice(PREFIX.length), call)
+  }).catch(() => reply('the ghostty tool failed', true))
 
   on('tool.check', async ($, e, next) => {
     if (READ_ONLY.has(e.tool)) return { decision: 'allow', reason: 'Reading Ghostty panes changes nothing.' }

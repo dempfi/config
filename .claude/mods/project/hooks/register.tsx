@@ -258,6 +258,17 @@ export const register: Register = on => {
     }
   }).catch(() => ({ deny: 'the project tool failed' }))
 
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    if (e.props.tool !== TOOL || e.props.isExpanded) return next(e)
+    const given = (e.props.input ?? {}) as Record<string, unknown>
+    const input = {
+      action: given.action,
+      ...(typeof given.role === 'string' ? { role: given.role } : {}),
+      ...(typeof given.summary === 'string' ? { summary: given.summary.slice(0, 60) } : {}),
+    }
+    return next({ ...e, props: { ...e.props, input } })
+  })
+
   on('ui.render', { component: 'PromptHint' }, async ($, e, next) => {
     if (e.surface !== 'terminal') return next(e)
     const lead = await read($, leadAtom)

@@ -4,16 +4,14 @@ import type { Board, ChartRequest, ChartSpec, Item } from '../types'
 import {
   CHART_KINDS,
   type Row,
-  barGeometry,
   describe as describeChart,
-  geometry,
-  isBarred,
-  isPlotted,
+  legend,
   render as renderChart,
+  titleRows,
   validate as validateChart,
 } from './chart.ts'
-import { draw, drawBars, pixelSize, toBase64 } from './raster.ts'
-import { ACTIONS, EMPTY, type Outcome, answer, apply, inSection, summary, userAdd, waiting } from './model.ts'
+import { type Scene, isPainted, scene } from './scene.ts'
+import { ACTIONS, EMPTY, type Outcome, answer, apply, inSection, progress, summary, userAdd, waiting } from './model.ts'
 
 const PANE = 'board'
 const TOOL = 'mcp__board__board' as const
@@ -27,11 +25,10 @@ const expandedAtom = atom({ plugin: 'board', key: 'expanded' } as const, 0)
 const chartsAtom = atom({ plugin: 'board', key: 'charts' } as const, [], { shape: 'charts-1' })
 
 const CHART_DESCRIPTION = [
-  'Draws a chart inline in the transcript, where the user sees it under this call. Use it whenever numbers are easier seen than read: trends over time, comparisons, distributions, progress.',
-  '- kind: line (trends), scatter (x/y points), bar (compare a few values, grouped when there are several series), hbar (ranked labelled values), sparkline (one compact row per series).',
-  '- series: [{ name?, values: number[] }] or [{ name?, points: [[x, y], ...] }]; labels name the x positions (or the bars).',
-  '- pin: true also keeps the chart on the board; pinning again under the same title replaces it, so a chart can track live progress. unpin: true with the title removes it.',
-  'The result tells you the range of what was drawn; you do not see the picture.',
+  'Draws a chart the user sees under this call; use it when numbers read better as a picture.',
+  'kind: line, scatter (points [[x,y]]), bar, hbar (ranked, labelled), sparkline. series: [{name?, values}] or [{name?, points}].',
+  'labels: one per value, or just a few (e.g. first and last date), spread evenly. height: rows, 10 by default.',
+  'pin keeps it on the board, replacing one of the same title; unpin with the title removes it.',
 ].join('\n')
 
 const CHART_SCHEMA = {
@@ -47,16 +44,38 @@ const CHART_SCHEMA = {
         properties: {
           name: { type: 'string' },
           values: { type: 'array', items: { type: 'number' } },
-          points: { type: 'array', items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 } },
+          points: { type: 'array', items: { type: 'array', items: { type: 'number' } } },
         },
       },
     },
     labels: { type: 'array', items: { type: 'string' } },
-    height: { type: 'number', description: 'Rows the plot takes, 3 to 30; 10 when absent' },
+    height: { type: 'number' },
     pin: { type: 'boolean' },
     unpin: { type: 'boolean' },
   },
   required: ['kind', 'series'],
+}
+
+const BRIEF_TEXT = 60
+
+function clip(text: string) {
+  return text.length > BRIEF_TEXT ? `${text.slice(0, BRIEF_TEXT - 1)}…` : text
+}
+
+export function briefInput(tool: string, input: unknown) {
+  const given = (input ?? {}) as Record<string, unknown>
+  if (tool === CHART_TOOL)
+    return {
+      kind: given.kind,
+      ...(typeof given.title === 'string' ? { title: clip(given.title) } : {}),
+      ...(given.pin === true ? { pin: true } : {}),
+    }
+  return {
+    action: given.action,
+    ...(typeof given.id === 'number' ? { id: given.id } : {}),
+    ...(typeof given.text === 'string' ? { text: clip(given.text) } : {}),
+    ...(Array.isArray(given.items) ? { items: `${given.items.length} steps` } : {}),
+  }
 }
 
 function specOf(request: ChartRequest): ChartSpec {
@@ -70,51 +89,95 @@ function specOf(request: ChartRequest): ChartSpec {
   }
 }
 
-const IMAGE_CACHE = 24
-const images = new Map<string, { rgba: string; width: number; height: number }>()
+const CHART_DIR = '/tmp/claude-charts'
+const LABEL_SCALE = 0.8
+const PIXEL_SCALE = 2
 
-function plotImage(spec: ChartSpec, width: number) {
-  const shape = geometry(spec, width)
-  const key = JSON.stringify([spec.kind, spec.series, shape.columns, shape.rows])
-  let image = images.get(key)
-  if (!image) {
-    const size = pixelSize(shape.columns, shape.rows)
-    const drawn = draw({
-      ...size,
-      rows: shape.rows,
-      series: shape.series,
-      connect: spec.kind === 'line',
-      xRange: shape.xRange,
-      yRange: shape.yRange,
-    })
-    image = { rgba: toBase64(drawn.rgba), width: drawn.width, height: drawn.height }
-    images.set(key, image)
-    if (images.size > IMAGE_CACHE) images.delete(images.keys().next().value ?? key)
-  }
-  return { shape, image }
+type Font = { family: string; size: number; heightAdjust: number; labelScale: number }
+type Painted = { file: string; columns: number; rows: number }
+
+const PAINT_TICK_MS = 200
+
+let terminalFont: Font | undefined
+let isDraining = false
+const ready = new Map<string, Painted>()
+const pending = new Set<string>()
+const queue: { drawn: Scene; font: Font; key: string }[] = []
+
+function hash(text: string) {
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0
+  return h.toString(36)
 }
 
-function barImage(spec: ChartSpec, width: number) {
-  const shape = barGeometry(spec, width)
-  const key = JSON.stringify([spec.kind, spec.series, shape.columns, shape.rows])
-  let image = images.get(key)
-  if (!image) {
-    const drawn = drawBars({
-      ...pixelSize(shape.columns, shape.rows),
-      rows: shape.rows,
-      series: shape.series,
-      max: shape.max,
-      isHorizontal: shape.isHorizontal,
-    })
-    image = { rgba: toBase64(drawn.rgba), width: drawn.width, height: drawn.height }
-    images.set(key, image)
-    if (images.size > IMAGE_CACHE) images.delete(images.keys().next().value ?? key)
+export function parseFont(config: string): Font {
+  const family = /^font-family = (.+)$/m.exec(config)?.[1]?.trim()
+  const size = Number(/^font-size = ([\d.]+)/m.exec(config)?.[1])
+  const adjust = /^adjust-cell-height = ([\d.]+)%/m.exec(config)?.[1]
+  return {
+    family: family || 'Menlo',
+    size: size > 0 ? size : 13,
+    heightAdjust: adjust ? Number(adjust) / 100 : 0,
+    labelScale: LABEL_SCALE,
   }
-  return { shape, image }
 }
 
-function axisCell(label: string, gutter: number) {
-  return label.padStart(gutter - 1) + (label ? '┤' : '│')
+async function fontOf($: EngineInterface) {
+  if (!terminalFont) {
+    const shown = await $.process.run(['ghostty', '+show-config']).catch(() => null)
+    terminalFont = parseFont(shown?.stdout ?? '')
+  }
+  return terminalFont
+}
+
+async function paintFile($: EngineInterface, drawn: Scene, font: Font, file: string) {
+  const isThere = await $.fs
+    .stat(file)
+    .then(stat => stat.kind === 'file')
+    .catch(() => false)
+  if (isThere) return true
+  await $.process.run(['mkdir', '-p', CHART_DIR])
+  const job = file.replace(/\.png$/, '.json')
+  await $.fs.write(job, JSON.stringify({ scene: drawn, font, scale: PIXEL_SCALE, out: file }))
+  const ran = await $.process.run(['osascript', '-l', 'JavaScript', `${$.plugin.root}/hooks/paint.js`, job])
+  return ran.exitCode === 0
+}
+
+async function drain($: EngineInterface) {
+  if (isDraining || queue.length === 0) return
+  isDraining = true
+  try {
+    while (queue.length > 0) {
+      const job = queue.shift()
+      if (!job) break
+      const file = `${CHART_DIR}/${job.key}.png`
+      const isDone = await paintFile($, job.drawn, job.font, file).catch(() => false)
+      if (isDone) ready.set(job.key, { file, columns: job.drawn.columns, rows: job.drawn.rows })
+      pending.delete(job.key)
+    }
+  } finally {
+    isDraining = false
+  }
+  $.ui.invalidate('ui.render')
+}
+
+function artFor(spec: ChartSpec, width: number) {
+  if (!isPainted(spec) || !terminalFont) return null
+  const drawn = scene(spec, width)
+  const font = terminalFont
+  const key = hash(JSON.stringify([drawn, font]))
+  const done = ready.get(key)
+  if (done) return done
+  if (!pending.has(key)) {
+    pending.add(key)
+    queue.push({ drawn, font, key })
+  }
+  return 'drawing' as const
+}
+
+async function startPainter($: EngineInterface) {
+  await fontOf($)
+  $.clock.every(PAINT_TICK_MS, () => void drain($))
 }
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
@@ -132,97 +195,30 @@ function textRows(els: Elements, rows: Row[], prefix: string) {
   ))
 }
 
-function chartTree(els: Elements, spec: ChartSpec, width: number, prefix: string) {
+function chartTree(els: Elements, spec: ChartSpec, width: number, prefix: string, art: Painted | 'drawing' | null) {
   const { Box, Text } = els
   const Image = 'Image' in els ? els.Image : undefined
-  const alt = `${spec.kind} chart${spec.title ? `: ${spec.title}` : ''}`
-  if (Image && isBarred(spec)) {
-    const { shape, image } = barImage(spec, width)
-    const picture = (
-      <Box flexShrink={0}>
-        <Image
-          key={`${prefix}bars`}
-          source={{ rgba: image.rgba, width: image.width, height: image.height }}
-          columns={shape.columns}
-          rows={shape.rows}
-          alt={alt}
-        />
-      </Box>
-    )
-    if (shape.isHorizontal)
-      return (
-        <Box flexDirection="column">
-          {textRows(els, shape.header, `${prefix}h`)}
-          <Box flexDirection="row">
-            <Box flexDirection="column" flexShrink={0}>
-              {shape.labels.map((label, row) => (
-                <Text key={`${prefix}l${row}`} dimColor>{`${label} `}</Text>
-              ))}
-            </Box>
-            {picture}
-            <Box flexDirection="column" flexShrink={0}>
-              {shape.numbers.map((number, row) => (
-                <Text key={`${prefix}n${row}`} dimColor>{` ${number}`}</Text>
-              ))}
-            </Box>
-          </Box>
-        </Box>
-      )
+  if (art === 'drawing' && Image)
     return (
       <Box flexDirection="column">
-        {textRows(els, shape.header, `${prefix}h`)}
-        <Box flexDirection="row">
-          <Box flexDirection="column" width={shape.gutter} flexShrink={0}>
-            {shape.yLabels.map((label, row) => (
-              <Text key={`${prefix}y${row}`} dimColor>
-                {axisCell(label, shape.gutter)}
-              </Text>
-            ))}
-          </Box>
-          {picture}
-        </Box>
-        <Text dimColor>{' '.repeat(shape.gutter) + shape.xAxis}</Text>
-        {textRows(els, shape.footer, `${prefix}f`)}
+        {textRows(els, titleRows(spec), `${prefix}h`)}
+        <Text dimColor>drawing…</Text>
       </Box>
     )
-  }
-  if (!isPlotted(spec) || !Image) return <Box flexDirection="column">{textRows(els, renderChart(spec, width), prefix)}</Box>
-  const { shape, image } = plotImage(spec, width)
+  if (!art || art === 'drawing' || !Image) return <Box flexDirection="column">{textRows(els, renderChart(spec, width), prefix)}</Box>
   return (
     <Box flexDirection="column">
-      {textRows(els, shape.header, `${prefix}h`)}
-      <Box flexDirection="row">
-        <Box flexDirection="column" width={shape.gutter} flexShrink={0}>
-          {shape.yLabels.map((label, row) => (
-            <Text key={`${prefix}y${row}`} dimColor>
-              {axisCell(label, shape.gutter)}
-            </Text>
-          ))}
-        </Box>
-        <Box flexShrink={0}>
-          <Image
-            key={`${prefix}plot`}
-            source={{ rgba: image.rgba, width: image.width, height: image.height }}
-            columns={shape.columns}
-            rows={shape.rows}
-            alt={`${spec.kind} chart${spec.title ? `: ${spec.title}` : ''}`}
-          />
-        </Box>
-        {shape.endWidth > 0 && (
-          <Box flexDirection="column" width={shape.endWidth} flexShrink={0}>
-            {Array.from({ length: shape.rows }, (_, row) => {
-              const end = shape.ends.find(one => one.row === row)
-              return (
-                <Text key={`${prefix}e${row}`} color={end?.color} bold={end ? true : undefined}>
-                  {end ? ` ${end.text}` : ' '}
-                </Text>
-              )
-            })}
-          </Box>
-        )}
+      {textRows(els, titleRows(spec), `${prefix}h`)}
+      <Box flexShrink={0}>
+        <Image
+          key={`${prefix}chart`}
+          source={{ file: art.file, format: 'png' }}
+          columns={art.columns}
+          rows={art.rows}
+          alt={`${spec.kind} chart${spec.title ? `: ${spec.title}` : ''}`}
+        />
       </Box>
-      <Text dimColor>{' '.repeat(shape.gutter) + shape.xAxis}</Text>
-      {textRows(els, shape.footer, `${prefix}f`)}
+      {textRows(els, legend(spec), `${prefix}f`)}
     </Box>
   )
 }
@@ -241,24 +237,20 @@ async function pinChart($: EngineInterface, spec: ChartSpec, isUnpin: boolean) {
 }
 
 const DESCRIPTION = [
-  'The board the user keeps beside this session: a live checklist of your work, the things you need from the user, and the settled state of the work. The user watches it, so keep it true.',
-  'Actions:',
-  '- plan {items}: at the start of a multi-step task, list its steps (replaces the open steps).',
-  '- start {id} when you begin a step, done {id} the moment it is finished; add {text} for a step you discover.',
-  '- ask {text, detail?, options?}: when you need a decision, approval or fact from the user and other work can go on meanwhile, ask here and keep working instead of stopping. detail is markdown: the evidence and what each option costs. The answer arrives later as a message from the board.',
-  '- note {text}: record a settled outcome (a decision made, something shipped or verified, with its link or path).',
-  '- remove {id}, clear_done: tidy the board.',
-  'Every call returns the whole board.',
+  'The checklist the user watches beside this session; keep it true.',
+  'plan {items} lists a task\'s steps; start/done {id} as you go; add {text} a found step.',
+  'ask {text, detail?, options?}: a decision only the user can make, parked so you keep working; detail is markdown evidence; the answer arrives later as a board message.',
+  'note {text}: a settled outcome. remove {id}, clear_done tidy. show returns the whole board; other actions return one line.',
 ].join('\n')
 
 const SCHEMA = {
   type: 'object',
   properties: {
     action: { type: 'string', enum: [...ACTIONS] },
-    items: { type: 'array', items: { type: 'string' }, description: 'plan: the steps, in order' },
+    items: { type: 'array', items: { type: 'string' } },
     text: { type: 'string' },
-    detail: { type: 'string', description: 'ask: markdown context the user reads before answering' },
-    options: { type: 'array', items: { type: 'string' }, description: 'ask: up to 6 answers the user can pick' },
+    detail: { type: 'string' },
+    options: { type: 'array', items: { type: 'string' } },
     id: { type: 'number' },
   },
   required: ['action'],
@@ -332,6 +324,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.tool.register({ name: 'board', description: DESCRIPTION, inputSchema: SCHEMA, isDeferred: false })
     await $.tool.register({ name: 'chart', description: CHART_DESCRIPTION, inputSchema: CHART_SCHEMA, isDeferred: false })
+    await startPainter($)
     const savedCharts = (await $.store.get(await chartsKey($))) as ChartSpec[] | undefined
     if (Array.isArray(savedCharts) && savedCharts.length > 0) await update($, chartsAtom, () => savedCharts)
     await $.command.register({
@@ -348,9 +341,10 @@ export const register: Register = on => {
   on('tool.call', { tool: TOOL }, async ($, e) => {
     if (!('action' in e) || !(ACTIONS as readonly string[]).includes(e.action))
       return { deny: `action must be one of ${ACTIONS.join(', ')}` }
+    if (e.action === 'show') return { result: summary((await read($, boardAtom)) ?? EMPTY) }
     const outcome = await change($, board => apply(board, e))
     if ('error' in outcome) return { deny: outcome.error }
-    return { result: `${outcome.said}\n\n${summary(outcome.board)}` }
+    return { result: `${outcome.said} · ${progress(outcome.board)}` }
   }).catch(() => ({ deny: 'the board failed' }))
 
   on('tool.check', { tool: TOOL }, async () => ({ decision: 'allow', reason: 'The board only records the plan.' })).catch(
@@ -367,7 +361,7 @@ export const register: Register = on => {
     const problem = validateChart(spec)
     if (problem) return { deny: problem }
     if (e.pin === true) await pinChart($, spec, false)
-    return { result: describeChart(spec) + (e.pin === true ? ' Pinned to the board.' : '') }
+    return { result: describeChart(spec) + (e.pin === true ? ' · pinned' : '') }
   }).catch(() => ({ deny: 'the chart failed' }))
 
   on('tool.check', { tool: CHART_TOOL }, async () => ({ decision: 'allow', reason: 'A chart only draws.' })).catch(
@@ -375,18 +369,23 @@ export const register: Register = on => {
   )
 
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
-    if (e.props.tool !== CHART_TOOL || e.props.isRunning || e.props.isErrored) return next(e)
+    const isChart = e.props.tool === CHART_TOOL
+    if (!isChart && e.props.tool !== TOOL) return next(e)
+    const quiet = e.props.isExpanded ? e : { ...e, props: { ...e.props, input: briefInput(e.props.tool, e.props.input) } }
+    if (!isChart || e.props.isRunning || e.props.isErrored) return next(quiet)
     const request = e.props.input as ChartRequest
-    if (request.unpin === true || validateChart(specOf(request))) return next(e)
+    if (request.unpin === true || validateChart(specOf(request))) return next(quiet)
     const els = $.ui.resolve(e)
     const { Box } = els
-    const theirs = await next(e)
+    const theirs = await next(quiet)
     const width = Math.min(120, Math.max(20, (e.viewport?.columns ?? 100) - 6))
+    const spec = specOf(request)
+    const art = artFor(spec, width)
     return (
       <Box flexDirection="column">
         {theirs}
         <Box flexDirection="column" paddingLeft={2} marginTop={1}>
-          {chartTree(els, specOf(request), width, 't')}
+          {chartTree(els, spec, width, 't', art)}
         </Box>
       </Box>
     )
@@ -411,6 +410,7 @@ export const register: Register = on => {
     const expanded = (await read($, expandedAtom)) ?? 0
     const charts = (await read($, chartsAtom)) ?? []
     const chartWidth = Math.max(20, e.props.bodyColumns - 1)
+    const arts = charts.map(chart => artFor(chart, chartWidth))
 
     const claude = inSection(board, 'claude')
     const finished = claude.filter(item => item.status === 'done')
@@ -504,7 +504,7 @@ export const register: Register = on => {
         </Box>
         {charts.map((chart, index) => (
           <Box key={`c${index}`} flexDirection="column">
-            {chartTree(els, chart, chartWidth, `c${index}`)}
+            {chartTree(els, chart, chartWidth, `c${index}`, arts[index] ?? null)}
           </Box>
         ))}
         {state.length > 0 && (

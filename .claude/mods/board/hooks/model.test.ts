@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { EMPTY, answer, apply, summary, userAdd, waiting } from './model.ts'
+import { EMPTY, answer, apply, progress, summary, userAdd, waiting } from './model.ts'
 import type { Board } from '../types'
 
 function must(outcome: ReturnType<typeof apply>): Board {
@@ -74,6 +74,14 @@ test('clearing finished items keeps the state record', async () => {
 test('an item the user adds is marked as theirs in the summary', async () => {
   const board = must(userAdd(EMPTY, 'you', 'call the bank'))
   expect(summary(board)).toContain('#1 call the bank (user)')
+})
+
+test('a board call answers in one line: what changed and where the work stands', async () => {
+  let board = must(apply(EMPTY, { action: 'plan', items: ['a', 'b', 'c'] }))
+  board = must(apply(board, { action: 'done', id: 1 }))
+  board = must(apply(board, { action: 'ask', text: 'push?' }))
+  expect(progress(board)).toBe('1/3 done · 1 waiting on the user')
+  expect(progress(EMPTY)).toBe('0/0 done')
 })
 
 test('a missing id or text is an error, not a change', async () => {

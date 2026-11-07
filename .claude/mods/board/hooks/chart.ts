@@ -74,7 +74,7 @@ function heightOf(spec: ChartSpec) {
   return Math.max(3, Math.min(MAX_HEIGHT, Math.floor(spec.height ?? DEFAULT_HEIGHT)))
 }
 
-function legend(spec: ChartSpec): Row[] {
+export function legend(spec: ChartSpec): Row[] {
   const named = spec.series.filter(series => series.name)
   if (spec.kind === 'sparkline' || spec.series.length < 2 || named.length === 0) return []
   const row: Row = []
@@ -86,7 +86,7 @@ function legend(spec: ChartSpec): Row[] {
   return [row]
 }
 
-function titleRows(spec: ChartSpec): Row[] {
+export function titleRows(spec: ChartSpec): Row[] {
   if (!spec.title) return []
   return [[{ text: spec.title }, ...(spec.unit ? [{ text: ` (${spec.unit})`, dim: true as const }] : [])]]
 }
@@ -228,162 +228,6 @@ function sparkline(spec: ChartSpec, width: number): Row[] {
   })
 }
 
-export function isPlotted(spec: ChartSpec) {
-  return spec.kind === 'line' || spec.kind === 'scatter'
-}
-
-export const GRID_STEPS = 4
-const LABEL_GAP = 2
-const X_TICKS = 5
-
-export function gridRows(rows: number) {
-  const found = new Set<number>()
-  for (let step = 0; step <= GRID_STEPS; step++) found.add(Math.round((step / GRID_STEPS) * (rows - 1)))
-  return [...found].sort((a, b) => a - b)
-}
-
-export function spread(labels: string[], columns: number, isCentered?: boolean) {
-  const axis = Array.from({ length: columns }, () => ' ')
-  const count = labels.length
-  if (count === 0 || columns <= 0) return ''
-  const at = (index: number) =>
-    isCentered
-      ? Math.round(((index + 0.5) / count) * columns - 0.5)
-      : count === 1
-        ? 0
-        : Math.round((index / (count - 1)) * (columns - 1))
-  const place = (text: string, center: number) => {
-    const chars = [...text]
-    const start = Math.max(0, Math.min(columns - chars.length, center - Math.floor(chars.length / 2)))
-    return { start, end: start + chars.length, chars }
-  }
-  const last = labels[count - 1] ?? ''
-  const final = last ? place(last, at(count - 1)) : null
-  let free = 0
-  const write = (slot: ReturnType<typeof place>) => {
-    slot.chars.forEach((char, offset) => {
-      if (slot.start + offset < columns) axis[slot.start + offset] = char
-    })
-  }
-  for (let index = 0; index < count - 1; index++) {
-    const text = labels[index] ?? ''
-    if (!text) continue
-    const slot = place(text, at(index))
-    const clearsLast = !final || slot.end + LABEL_GAP <= final.start
-    if (slot.start >= free && clearsLast) {
-      write(slot)
-      free = slot.end + LABEL_GAP
-    }
-  }
-  if (final) write(final)
-  return axis.join('').trimEnd()
-}
-
-function rowOf(value: number, range: { min: number; max: number }, rows: number) {
-  return Math.round((1 - (value - range.min) / (range.max - range.min || 1)) * (rows - 1))
-}
-
-export function geometry(spec: ChartSpec, width: number) {
-  const rows = heightOf(spec)
-  const series = spec.series.map((one, index) => ({ color: colorOf(index), points: pointsOf(one) }))
-  const all = series.flatMap(one => one.points)
-  const yRange = extent(all.map(([, y]) => y))
-  const xRange = extent(all.map(([x]) => x))
-  const grid = gridRows(rows)
-  const yLabels = Array.from({ length: rows }, (_, row) =>
-    grid.includes(row) ? compact(yRange.max - (row / (rows - 1)) * (yRange.max - yRange.min)) : '',
-  )
-  const gutter = Math.max(...yLabels.map(label => [...label].length)) + 1
-
-  const ends: { row: number; text: string; color: string }[] = []
-  for (const one of series) {
-    const last = [...one.points].sort((a, b) => a[0] - b[0]).at(-1)
-    if (!last) continue
-    let row = rowOf(last[1], yRange, rows)
-    while (ends.some(end => end.row === row) && row < rows - 1) row++
-    while (ends.some(end => end.row === row) && row > 0) row--
-    ends.push({ row, text: compact(last[1]), color: one.color })
-  }
-  const endWidth = spec.kind === 'line' ? Math.max(0, ...ends.map(end => [...end.text].length + 1)) : 0
-
-  const columns = Math.max(4, Math.min(255, Math.floor(width) - gutter - 1 - endWidth))
-  const xLabels = spec.labels?.length
-    ? spec.labels
-    : Array.from({ length: X_TICKS }, (_, step) => compact(xRange.min + (step / (X_TICKS - 1)) * (xRange.max - xRange.min)))
-  return {
-    rows,
-    columns,
-    gutter,
-    yLabels,
-    grid,
-    ends: spec.kind === 'line' ? ends : [],
-    endWidth,
-    xAxis: spread(xLabels, columns),
-    series,
-    xRange,
-    yRange,
-    header: titleRows(spec),
-    footer: legend(spec),
-  }
-}
-
-export function isBarred(spec: ChartSpec) {
-  return spec.kind === 'bar' || spec.kind === 'hbar'
-}
-
-export function barGeometry(spec: ChartSpec, width: number) {
-  const series = spec.series.map((one, index) => ({
-    color: colorOf(index),
-    values: (one.values ?? pointsOf(one).map(([, y]) => y)).map(value => (Number.isFinite(value) ? value : 0)),
-  }))
-  const header = titleRows(spec)
-  const footer = legend(spec)
-
-  if (spec.kind === 'hbar') {
-    const values = series[0]?.values.slice(0, MAX_HEIGHT) ?? []
-    const max = extent([0, ...values]).max
-    const labels = values.map((_, index) => spec.labels?.[index] ?? String(index + 1))
-    const labelWidth = Math.min(24, Math.max(1, ...labels.map(label => [...label].length)))
-    const numbers = values.map(compact)
-    const numberWidth = Math.max(1, ...numbers.map(text => text.length))
-    const columns = Math.max(4, Math.min(255, Math.floor(width) - labelWidth - numberWidth - 2))
-    return {
-      isHorizontal: true as const,
-      rows: Math.max(1, values.length),
-      columns,
-      labels: labels.map(label => [...label].slice(0, labelWidth).join('').padStart(labelWidth)),
-      numbers,
-      series: series.slice(0, 1).map(one => ({ ...one, values })),
-      max,
-      grid: [] as number[],
-      header,
-      footer: [] as Row[],
-    }
-  }
-
-  const rows = heightOf(spec)
-  const count = Math.max(0, ...series.map(one => one.values.length))
-  const max = extent([0, ...series.flatMap(one => one.values)]).max
-  const grid = gridRows(rows)
-  const yLabels = Array.from({ length: rows }, (_, row) => (grid.includes(row) ? compact(max - (row / (rows - 1)) * max) : ''))
-  const gutter = Math.max(...yLabels.map(label => [...label].length)) + 1
-  const columns = Math.max(4, Math.min(255, Math.floor(width) - gutter - 1))
-  const labels = spec.labels?.slice(0, count) ?? Array.from({ length: count }, (_, index) => String(index + 1))
-  return {
-    isHorizontal: false as const,
-    rows,
-    columns,
-    gutter,
-    yLabels,
-    xAxis: spread(labels, columns, true),
-    series,
-    max,
-    grid,
-    header,
-    footer,
-  }
-}
-
 export function render(spec: ChartSpec, width: number): Row[] {
   const room = Math.max(12, Math.floor(width))
   const body =
@@ -403,10 +247,10 @@ export function describe(spec: ChartSpec) {
   const parts = spec.series.map((series, index) => {
     const values = (series.values ?? pointsOf(series).map(([, y]) => y)).filter(Number.isFinite)
     const name = series.name ?? `series ${index + 1}`
-    if (values.length === 0) return `${name}: no data`
-    return `${name}: ${values.length} points, ${compact(Math.min(...values))} to ${compact(Math.max(...values))}`
+    if (values.length === 0) return `${name} empty`
+    return `${name} ${compact(Math.min(...values))}–${compact(Math.max(...values))}`
   })
-  return `Drew a ${spec.kind} chart${spec.title ? ` "${spec.title}"` : ''}: ${parts.join('; ')}.`
+  return `Drawn: ${parts.join('; ')}`
 }
 
 export function validate(spec: ChartSpec) {

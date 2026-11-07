@@ -13,6 +13,7 @@ export const ACTIONS = [
   'note',
   'remove',
   'clear_done',
+  'show',
 ] as const satisfies readonly BoardAction[]
 
 export type Request = BoardRequest
@@ -36,8 +37,17 @@ function needText(request: Request) {
   return text ? text : null
 }
 
+export function progress(board: Board) {
+  const steps = inSection(board, 'claude')
+  const done = steps.filter(item => item.status === 'done').length
+  const asks = waiting(board).length
+  return `${done}/${steps.length} done${asks ? ` · ${asks} waiting on the user` : ''}`
+}
+
 export function apply(board: Board, request: Request): Outcome {
   switch (request.action) {
+    case 'show':
+      return { board, said: summary(board) }
     case 'plan': {
       const steps = (request.items ?? []).map(step => step.trim()).filter(Boolean)
       if (steps.length === 0) return { error: 'plan needs items' }

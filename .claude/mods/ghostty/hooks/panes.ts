@@ -74,7 +74,8 @@ export function findPane(panes: Pane[], query: string) {
       pane.session?.name === wanted ||
       pane.session?.id === wanted,
   )
-  if (matches.length === 1) return matches[0]
+  const [match] = matches
+  if (matches.length === 1 && match) return match
   if (matches.length > 1) throw new Error(`"${query}" matches ${matches.length} panes; pass a pane id`)
   throw new Error(`no pane matches "${query}"; list them with the panes tool`)
 }
@@ -154,12 +155,8 @@ export function headline(pane: Pane) {
   return `${shortTty(pane.tty)} ${who}`
 }
 
-export function describePane(pane: Pane) {
-  const where = `window ${pane.window} tab ${pane.tab}${pane.isFront ? ' (front)' : ''}`
-  const who = pane.isThisSession
-    ? 'this session'
-    : pane.session
-      ? `Claude session ${pane.session.name ?? pane.session.id} (${pane.session.status ?? 'unknown'})`
-      : (pane.foreground ?? 'shell')
-  return `${pane.id}  ${shortTty(pane.tty)}  ${where}  ${who}  "${pane.title}"  ${pane.cwd}`
+export function describePane(pane: Pane, cwd?: string) {
+  const where = `w${pane.window}t${pane.tab}${pane.isFront ? '*' : ''}`
+  const place = pane.cwd && pane.cwd !== cwd ? ` ${pane.cwd}` : ''
+  return `${headline(pane)} ${where} "${pane.title}"${place}`
 }
