@@ -242,11 +242,16 @@ export function gridRows(rows: number) {
   return [...found].sort((a, b) => a - b)
 }
 
-export function spread(labels: string[], columns: number) {
+export function spread(labels: string[], columns: number, isCentered?: boolean) {
   const axis = Array.from({ length: columns }, () => ' ')
   const count = labels.length
   if (count === 0 || columns <= 0) return ''
-  const at = (index: number) => (count === 1 ? 0 : Math.round((index / (count - 1)) * (columns - 1)))
+  const at = (index: number) =>
+    isCentered
+      ? Math.round(((index + 0.5) / count) * columns - 0.5)
+      : count === 1
+        ? 0
+        : Math.round((index / (count - 1)) * (columns - 1))
   const place = (text: string, center: number) => {
     const chars = [...text]
     const start = Math.max(0, Math.min(columns - chars.length, center - Math.floor(chars.length / 2)))
@@ -319,6 +324,63 @@ export function geometry(spec: ChartSpec, width: number) {
     yRange,
     header: titleRows(spec),
     footer: legend(spec),
+  }
+}
+
+export function isBarred(spec: ChartSpec) {
+  return spec.kind === 'bar' || spec.kind === 'hbar'
+}
+
+export function barGeometry(spec: ChartSpec, width: number) {
+  const series = spec.series.map((one, index) => ({
+    color: colorOf(index),
+    values: (one.values ?? pointsOf(one).map(([, y]) => y)).map(value => (Number.isFinite(value) ? value : 0)),
+  }))
+  const header = titleRows(spec)
+  const footer = legend(spec)
+
+  if (spec.kind === 'hbar') {
+    const values = series[0]?.values.slice(0, MAX_HEIGHT) ?? []
+    const max = extent([0, ...values]).max
+    const labels = values.map((_, index) => spec.labels?.[index] ?? String(index + 1))
+    const labelWidth = Math.min(24, Math.max(1, ...labels.map(label => [...label].length)))
+    const numbers = values.map(compact)
+    const numberWidth = Math.max(1, ...numbers.map(text => text.length))
+    const columns = Math.max(4, Math.min(255, Math.floor(width) - labelWidth - numberWidth - 2))
+    return {
+      isHorizontal: true as const,
+      rows: Math.max(1, values.length),
+      columns,
+      labels: labels.map(label => [...label].slice(0, labelWidth).join('').padStart(labelWidth)),
+      numbers,
+      series: series.slice(0, 1).map(one => ({ ...one, values })),
+      max,
+      grid: [] as number[],
+      header,
+      footer: [] as Row[],
+    }
+  }
+
+  const rows = heightOf(spec)
+  const count = Math.max(0, ...series.map(one => one.values.length))
+  const max = extent([0, ...series.flatMap(one => one.values)]).max
+  const grid = gridRows(rows)
+  const yLabels = Array.from({ length: rows }, (_, row) => (grid.includes(row) ? compact(max - (row / (rows - 1)) * max) : ''))
+  const gutter = Math.max(...yLabels.map(label => [...label].length)) + 1
+  const columns = Math.max(4, Math.min(255, Math.floor(width) - gutter - 1))
+  const labels = spec.labels?.slice(0, count) ?? Array.from({ length: count }, (_, index) => String(index + 1))
+  return {
+    isHorizontal: false as const,
+    rows,
+    columns,
+    gutter,
+    yLabels,
+    xAxis: spread(labels, columns, true),
+    series,
+    max,
+    grid,
+    header,
+    footer,
   }
 }
 

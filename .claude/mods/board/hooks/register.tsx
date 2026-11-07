@@ -4,13 +4,15 @@ import type { Board, ChartRequest, ChartSpec, Item } from '../types'
 import {
   CHART_KINDS,
   type Row,
+  barGeometry,
   describe as describeChart,
   geometry,
+  isBarred,
   isPlotted,
   render as renderChart,
   validate as validateChart,
 } from './chart.ts'
-import { draw, pixelSize, toBase64 } from './raster.ts'
+import { draw, drawBars, pixelSize, toBase64 } from './raster.ts'
 import { ACTIONS, EMPTY, type Outcome, answer, apply, inSection, summary, userAdd, waiting } from './model.ts'
 
 const PANE = 'board'
@@ -93,6 +95,26 @@ function plotImage(spec: ChartSpec, width: number) {
   return { shape, image }
 }
 
+function barImage(spec: ChartSpec, width: number) {
+  const shape = barGeometry(spec, width)
+  const key = JSON.stringify([spec.kind, spec.series, shape.columns, shape.rows])
+  let image = images.get(key)
+  if (!image) {
+    const drawn = drawBars({
+      ...pixelSize(shape.columns, shape.rows),
+      rows: shape.rows,
+      grid: shape.grid,
+      series: shape.series,
+      max: shape.max,
+      isHorizontal: shape.isHorizontal,
+    })
+    image = { rgba: toBase64(drawn.rgba), width: drawn.width, height: drawn.height }
+    images.set(key, image)
+    if (images.size > IMAGE_CACHE) images.delete(images.keys().next().value ?? key)
+  }
+  return { shape, image }
+}
+
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
 function textRows(els: Elements, rows: Row[], prefix: string) {
@@ -111,6 +133,57 @@ function textRows(els: Elements, rows: Row[], prefix: string) {
 function chartTree(els: Elements, spec: ChartSpec, width: number, prefix: string) {
   const { Box, Text } = els
   const Image = 'Image' in els ? els.Image : undefined
+  const alt = `${spec.kind} chart${spec.title ? `: ${spec.title}` : ''}`
+  if (Image && isBarred(spec)) {
+    const { shape, image } = barImage(spec, width)
+    const picture = (
+      <Box flexShrink={0}>
+        <Image
+          key={`${prefix}bars`}
+          source={{ rgba: image.rgba, width: image.width, height: image.height }}
+          columns={shape.columns}
+          rows={shape.rows}
+          alt={alt}
+        />
+      </Box>
+    )
+    if (shape.isHorizontal)
+      return (
+        <Box flexDirection="column">
+          {textRows(els, shape.header, `${prefix}h`)}
+          <Box flexDirection="row">
+            <Box flexDirection="column" flexShrink={0}>
+              {shape.labels.map((label, row) => (
+                <Text key={`${prefix}l${row}`} dimColor>{`${label} `}</Text>
+              ))}
+            </Box>
+            {picture}
+            <Box flexDirection="column" flexShrink={0}>
+              {shape.numbers.map((number, row) => (
+                <Text key={`${prefix}n${row}`} dimColor>{` ${number}`}</Text>
+              ))}
+            </Box>
+          </Box>
+        </Box>
+      )
+    return (
+      <Box flexDirection="column">
+        {textRows(els, shape.header, `${prefix}h`)}
+        <Box flexDirection="row">
+          <Box flexDirection="column" width={shape.gutter} flexShrink={0}>
+            {shape.yLabels.map((label, row) => (
+              <Text key={`${prefix}y${row}`} dimColor>
+                {label.padStart(shape.gutter - 1)}
+              </Text>
+            ))}
+          </Box>
+          {picture}
+        </Box>
+        <Text dimColor>{' '.repeat(shape.gutter) + shape.xAxis}</Text>
+        {textRows(els, shape.footer, `${prefix}f`)}
+      </Box>
+    )
+  }
   if (!isPlotted(spec) || !Image) return <Box flexDirection="column">{textRows(els, renderChart(spec, width), prefix)}</Box>
   const { shape, image } = plotImage(spec, width)
   return (

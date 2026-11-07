@@ -1,5 +1,31 @@
 import { expect, test } from 'claude-code/testing'
-import { colorOf, compact, describe, geometry, gridRows, render, rowWidth, spread, validate } from './chart.ts'
+import { barGeometry, colorOf, compact, describe, geometry, gridRows, render, rowWidth, spread, validate } from './chart.ts'
+
+test('bar labels sit centred under their bars', async () => {
+  const shape = barGeometry({ kind: 'bar', series: [{ values: [1, 2, 3, 4] }], labels: ['a', 'b', 'c', 'd'] }, 45)
+  if (shape.isHorizontal) throw new Error('vertical expected')
+  const slot = shape.columns / 4
+  const axis = [...shape.xAxis]
+  ;['a', 'b', 'c', 'd'].forEach((label, index) => {
+    expect(Math.abs(axis.indexOf(label) - ((index + 0.5) * slot - 0.5))).toBeLessThanOrEqual(1)
+  })
+})
+
+test('a bar chart measures from zero, so its bottom gridline reads 0', async () => {
+  const shape = barGeometry({ kind: 'bar', series: [{ values: [40, 80] }], height: 5 }, 40)
+  if (shape.isHorizontal) throw new Error('vertical expected')
+  expect(shape.yLabels[0]).toBe('80')
+  expect(shape.yLabels.at(-1)).toBe('0')
+})
+
+test('horizontal bars give each bar a row, its label on the left and its value on the right', async () => {
+  const shape = barGeometry({ kind: 'hbar', series: [{ values: [939, 195] }], labels: ['board', 'inline-images'] }, 60)
+  if (!shape.isHorizontal) throw new Error('horizontal expected')
+  expect(shape.rows).toBe(2)
+  expect(shape.labels).toEqual(['        board', 'inline-images'])
+  expect(shape.numbers).toEqual(['939', '195'])
+  expect([...shape.labels[0] ?? ''].length + 1 + shape.columns + 1 + 3).toBeLessThanOrEqual(60)
+})
 
 test('every gridline row carries its value, top to bottom', async () => {
   const shape = geometry({ kind: 'line', series: [{ values: [0, 100] }], height: 9 }, 80)

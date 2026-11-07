@@ -193,6 +193,101 @@ export function draw(plot: Plot) {
 
 type Base64Bytes = Uint8Array & { toBase64(): string }
 
+export type Bars = {
+  width: number
+  height: number
+  rows: number
+  grid: number[]
+  series: { color: string; values: number[] }[]
+  max: number
+  isHorizontal: boolean
+}
+
+const BAR_SHARE = 0.72
+const BAND_SHARE = 0.56
+const BAR_GAP = 2
+const BAR_ALPHA = 0.92
+
+function roundedBar(
+  canvas: Canvas,
+  box: { x0: number; y0: number; x1: number; y1: number },
+  color: { r: number; g: number; b: number },
+  radius: number,
+  roundEnd: 'top' | 'right',
+) {
+  for (let y = Math.floor(box.y0); y < Math.ceil(box.y1); y++)
+    for (let x = Math.floor(box.x0); x < Math.ceil(box.x1); x++) {
+      const cx = x + 0.5
+      const cy = y + 0.5
+      const coverX = Math.min(1, Math.max(0, Math.min(cx - box.x0 + 0.5, box.x1 - cx + 0.5)))
+      const coverY = Math.min(1, Math.max(0, Math.min(cy - box.y0 + 0.5, box.y1 - cy + 0.5)))
+      let coverage = coverX * coverY
+      const corners =
+        roundEnd === 'top'
+          ? [
+              [box.x0 + radius, box.y0 + radius],
+              [box.x1 - radius, box.y0 + radius],
+            ]
+          : [
+              [box.x1 - radius, box.y0 + radius],
+              [box.x1 - radius, box.y1 - radius],
+            ]
+      for (const [kx = 0, ky = 0] of corners) {
+        const isOutX = roundEnd === 'top' ? (kx < (box.x0 + box.x1) / 2 ? cx < kx : cx > kx) : cx > kx
+        const isOutY = roundEnd === 'top' ? cy < ky : ky < (box.y0 + box.y1) / 2 ? cy < ky : cy > ky
+        if (isOutX && isOutY) coverage = Math.min(coverage, Math.max(0, radius + 0.5 - Math.hypot(cx - kx, cy - ky)))
+      }
+      canvas.blend(x, y, color, coverage * BAR_ALPHA)
+    }
+}
+
+export function drawBars(bars: Bars) {
+  const canvas = new Canvas(bars.width, bars.height)
+  const rowHeight = bars.height / Math.max(1, bars.rows)
+  const count = Math.max(0, ...bars.series.map(one => one.values.length))
+  const max = bars.max || 1
+
+  if (bars.isHorizontal) {
+    const left = PAD
+    const right = bars.width - PAD
+    bars.series[0]?.values.forEach((value, row) => {
+      const band = rowHeight * BAND_SHARE
+      const center = (row + 0.5) * rowHeight
+      const length = (Math.max(0, value) / max) * (right - left)
+      if (length <= 0) return
+      roundedBar(
+        canvas,
+        { x0: left, y0: center - band / 2, x1: left + length, y1: center + band / 2 },
+        hex(bars.series[0]?.color ?? '#888888'),
+        Math.min(band / 2, length / 2, 5),
+        'right',
+      )
+    })
+    return { width: bars.width, height: bars.height, rgba: canvas.data }
+  }
+
+  const top = rowHeight / 2
+  const bottom = bars.height - rowHeight / 2
+  for (const row of bars.grid) {
+    const y = Math.round(top + ((bottom - top) * row) / Math.max(1, bars.rows - 1))
+    for (let x = PAD; x < bars.width - PAD; x += 1) if (x % 4 < 2) canvas.blend(x, y, GRID, GRID.a)
+  }
+  const slot = (bars.width - 2 * PAD) / Math.max(1, count)
+  const group = slot * BAR_SHARE
+  const barWidth = group / Math.max(1, bars.series.length)
+  bars.series.forEach((series, s) => {
+    const color = hex(series.color)
+    series.values.forEach((value, index) => {
+      const height = (Math.max(0, value) / max) * (bottom - top)
+      if (height <= 0) return
+      const x0 = PAD + index * slot + (slot - group) / 2 + s * barWidth + BAR_GAP / 2
+      const x1 = x0 + barWidth - BAR_GAP
+      roundedBar(canvas, { x0, y0: bottom - height, x1, y1: bottom }, color, Math.min((x1 - x0) / 2, height, 5), 'top')
+    })
+  })
+  return { width: bars.width, height: bars.height, rgba: canvas.data }
+}
+
 export function toBase64(bytes: Uint8ClampedArray) {
   return (new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength) as Base64Bytes).toBase64()
 }

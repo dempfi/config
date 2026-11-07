@@ -1,5 +1,34 @@
 import { expect, test } from 'claude-code/testing'
-import { MAX_BYTES, draw, monotone, pixelSize } from './raster.ts'
+import { MAX_BYTES, draw, drawBars, monotone, pixelSize } from './raster.ts'
+
+test('the tallest bar reaches the top gridline, a zero bar draws nothing', async () => {
+  const image = drawBars({
+    width: 200,
+    height: 100,
+    rows: 10,
+    grid: [0, 9],
+    series: [{ color: '#ff0000', values: [0, 10] }],
+    max: 10,
+    isHorizontal: false,
+  })
+  expect(pixel(image, 150, 10).a).toBeGreaterThan(200)
+  expect(pixel(image, 50, 80).a).toBe(0)
+})
+
+test('horizontal bars run as far as their share of the largest value', async () => {
+  const image = drawBars({
+    width: 205,
+    height: 100,
+    rows: 2,
+    grid: [],
+    series: [{ color: '#00ff00', values: [50, 100] }],
+    max: 100,
+    isHorizontal: true,
+  })
+  expect(pixel(image, 80, 25).a).toBeGreaterThan(200)
+  expect(pixel(image, 130, 25).a).toBe(0)
+  expect(pixel(image, 180, 75).a).toBeGreaterThan(200)
+})
 
 function pixel(image: ReturnType<typeof draw>, x: number, y: number) {
   const at = (y * image.width + x) * 4
