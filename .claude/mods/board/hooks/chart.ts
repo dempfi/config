@@ -2,7 +2,7 @@ import type { ChartKind, ChartSeries, ChartSpec } from '../types'
 
 export const CHART_KINDS = ['line', 'scatter', 'bar', 'hbar', 'sparkline'] as const satisfies readonly ChartKind[]
 
-export const PALETTE = ['#5ccfe6', '#ffad66', '#87d96c', '#d4bfff', '#f28779', '#ffd173', '#95e6cb'] as const
+export const PALETTE = ['#399ee6', '#fa8d3e', '#6cbf43', '#a37acc', '#f07171', '#e6b450', '#4cbf99'] as const
 
 export type Piece = { text: string; color?: string; dim?: true }
 export type Row = Piece[]
@@ -226,6 +226,38 @@ function sparkline(spec: ChartSpec, width: number): Row[] {
       { text: tail, dim: true },
     ]
   })
+}
+
+export function isPlotted(spec: ChartSpec) {
+  return spec.kind === 'line' || spec.kind === 'scatter'
+}
+
+export function geometry(spec: ChartSpec, width: number) {
+  const rows = heightOf(spec)
+  const series = spec.series.map((one, index) => ({ color: colorOf(index), points: pointsOf(one) }))
+  const all = series.flatMap(one => one.points)
+  const yRange = extent(all.map(([, y]) => y))
+  const xRange = extent(all.map(([x]) => x))
+  const top = compact(yRange.max)
+  const bottom = compact(yRange.min)
+  const gutter = Math.max([...top].length, [...bottom].length) + 1
+  const columns = Math.max(4, Math.min(255, Math.floor(width) - gutter - 1))
+  const first = spec.labels?.[0] ?? compact(xRange.min)
+  const last = spec.labels?.at(-1) ?? compact(xRange.max)
+  const room = Math.max(1, columns - [...first].length - [...last].length)
+  return {
+    rows,
+    columns,
+    gutter,
+    top,
+    bottom,
+    xAxis: first + ' '.repeat(room) + last,
+    series,
+    xRange,
+    yRange,
+    header: titleRows(spec),
+    footer: legend(spec),
+  }
 }
 
 export function render(spec: ChartSpec, width: number): Row[] {

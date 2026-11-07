@@ -89,11 +89,65 @@ export function showsPermissionDialog(screen: string) {
   return PERMISSION_DIALOG.test(screen)
 }
 
+const IMAGE_CELLS = /(?:\u{10EEEE}\p{M}*)+/gu
+const SIDEBAR_SHARE = 0.4
+const SIDEBAR_MIN_COLUMN = 40
+
+const CHROME = [
+  /^\s*─{8,}.*$/,
+  /^\s*\d[\d,.]*k? tokens\s*$/,
+  /^\s*⎿\s+Tip:/,
+  /AUTOMATED · /,
+  /^\s*◆ [A-Z0-9-]+ /,
+]
+
+function sidebarColumn(lines: string[][]) {
+  const counts = new Map<number, number>()
+  let filled = 0
+  for (const chars of lines) {
+    if (chars.length === 0) continue
+    filled++
+    chars.forEach((char, column) => {
+      if (char === '│' && column >= SIDEBAR_MIN_COLUMN) counts.set(column, (counts.get(column) ?? 0) + 1)
+    })
+  }
+  let best: number | null = null
+  let most = 0
+  for (const [column, count] of counts)
+    if (count > most) {
+      best = column
+      most = count
+    }
+  return best !== null && filled > 0 && most / filled >= SIDEBAR_SHARE ? best : null
+}
+
+export function clean(text: string) {
+  const lines = text.split('\n').map(line => [...line.replace(IMAGE_CELLS, '[image]')])
+  const cut = sidebarColumn(lines)
+  const kept = lines
+    .map(chars => (cut === null ? chars : chars.slice(0, cut)).join('').trimEnd())
+    .filter(line => !CHROME.some(pattern => pattern.test(line)))
+  return kept
+    .join('\n')
+    .replace(/^\s*│\s*$/gm, '')
+    .replace(/(?:\[image\]\n\s*)+\[image\]/g, '[image]')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
 export function tail(text: string, lines: number) {
-  const rows = text.replace(/\s+$/, '').split('\n')
+  const rows = clean(text).replace(/\s+$/, '').split('\n')
   const kept = rows.slice(-lines)
   const dropped = rows.length - kept.length
   return { text: kept.join('\n'), dropped }
+}
+
+export function headline(pane: Pane) {
+  const who = pane.isThisSession
+    ? 'this session'
+    : pane.session
+      ? `${pane.session.name ?? pane.session.id} (${pane.session.status ?? 'unknown'})`
+      : (pane.foreground ?? 'shell')
+  return `${shortTty(pane.tty)} ${who}`
 }
 
 export function describePane(pane: Pane) {

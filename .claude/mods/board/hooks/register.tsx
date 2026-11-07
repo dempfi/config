@@ -1,7 +1,16 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Board, ChartRequest, ChartSpec, Item } from '../types'
-import { CHART_KINDS, type Row, describe as describeChart, render as renderChart, validate as validateChart } from './chart.ts'
+import {
+  CHART_KINDS,
+  type Row,
+  describe as describeChart,
+  geometry,
+  isPlotted,
+  render as renderChart,
+  validate as validateChart,
+} from './chart.ts'
+import { draw, pixelSize, toBase64 } from './raster.ts'
 import { ACTIONS, EMPTY, type Outcome, answer, apply, inSection, summary, userAdd, waiting } from './model.ts'
 
 const PANE = 'board'
@@ -57,6 +66,79 @@ function specOf(request: ChartRequest): ChartSpec {
     ...(request.unit ? { unit: request.unit } : {}),
     ...(request.height ? { height: request.height } : {}),
   }
+}
+
+const IMAGE_CACHE = 24
+const images = new Map<string, { rgba: string; width: number; height: number }>()
+
+function plotImage(spec: ChartSpec, width: number) {
+  const shape = geometry(spec, width)
+  const key = JSON.stringify([spec.kind, spec.series, shape.columns, shape.rows])
+  let image = images.get(key)
+  if (!image) {
+    const size = pixelSize(shape.columns, shape.rows)
+    const drawn = draw({
+      ...size,
+      series: shape.series,
+      connect: spec.kind === 'line',
+      xRange: shape.xRange,
+      yRange: shape.yRange,
+    })
+    image = { rgba: toBase64(drawn.rgba), width: drawn.width, height: drawn.height }
+    images.set(key, image)
+    if (images.size > IMAGE_CACHE) images.delete(images.keys().next().value ?? key)
+  }
+  return { shape, image }
+}
+
+type Elements = ReturnType<EngineInterface['ui']['resolve']>
+
+function textRows(els: Elements, rows: Row[], prefix: string) {
+  const { Text } = els
+  return rows.map((row, index) => (
+    <Text key={`${prefix}${index}`} wrap="truncate-end">
+      {row.map(piece => (
+        <Text color={piece.color} dimColor={piece.dim === true}>
+          {piece.text}
+        </Text>
+      ))}
+    </Text>
+  ))
+}
+
+function chartTree(els: Elements, spec: ChartSpec, width: number, prefix: string) {
+  const { Box, Text } = els
+  const Image = 'Image' in els ? els.Image : undefined
+  if (!isPlotted(spec) || !Image) return <Box flexDirection="column">{textRows(els, renderChart(spec, width), prefix)}</Box>
+  const { shape, image } = plotImage(spec, width)
+  const labels = Array.from({ length: shape.rows }, (_, row) =>
+    row === 0 ? shape.top : row === shape.rows - 1 ? shape.bottom : '',
+  )
+  return (
+    <Box flexDirection="column">
+      {textRows(els, shape.header, `${prefix}h`)}
+      <Box flexDirection="row">
+        <Box flexDirection="column" width={shape.gutter} flexShrink={0}>
+          {labels.map((label, row) => (
+            <Text key={`${prefix}y${row}`} dimColor>
+              {label.padStart(shape.gutter - 1)}
+            </Text>
+          ))}
+        </Box>
+        <Box flexShrink={0}>
+          <Image
+            key={`${prefix}plot`}
+            source={{ rgba: image.rgba, width: image.width, height: image.height }}
+            columns={shape.columns}
+            rows={shape.rows}
+            alt={`${spec.kind} chart${spec.title ? `: ${spec.title}` : ''}`}
+          />
+        </Box>
+      </Box>
+      <Text dimColor>{' '.repeat(shape.gutter) + shape.xAxis}</Text>
+      {textRows(els, shape.footer, `${prefix}f`)}
+    </Box>
+  )
 }
 
 async function chartsKey($: EngineInterface) {
@@ -210,22 +292,15 @@ export const register: Register = on => {
     if (e.props.tool !== CHART_TOOL || e.props.isRunning || e.props.isErrored) return next(e)
     const request = e.props.input as ChartRequest
     if (request.unpin === true || validateChart(specOf(request))) return next(e)
-    const { Box, Text } = $.ui.resolve(e)
+    const els = $.ui.resolve(e)
+    const { Box } = els
     const theirs = await next(e)
     const width = Math.min(120, Math.max(20, (e.viewport?.columns ?? 100) - 6))
     return (
       <Box flexDirection="column">
         {theirs}
         <Box flexDirection="column" paddingLeft={2} marginTop={1}>
-          {renderChart(specOf(request), width).map((row: Row, index: number) => (
-            <Text key={`r${index}`} wrap="truncate-end">
-              {row.map(piece => (
-                <Text color={piece.color} dimColor={piece.dim === true}>
-                  {piece.text}
-                </Text>
-              ))}
-            </Text>
-          ))}
+          {chartTree(els, specOf(request), width, 't')}
         </Box>
       </Box>
     )
@@ -244,7 +319,8 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Markdown, Input } = $.ui.resolve(e)
+    const els = $.ui.resolve(e)
+    const { Box, Text, Button, Markdown, Input } = els
     const board = (await read($, boardAtom)) ?? EMPTY
     const expanded = (await read($, expandedAtom)) ?? 0
     const charts = (await read($, chartsAtom)) ?? []
@@ -342,15 +418,7 @@ export const register: Register = on => {
         </Box>
         {charts.map((chart, index) => (
           <Box key={`c${index}`} flexDirection="column">
-            {renderChart(chart, chartWidth).map((row: Row, line: number) => (
-              <Text key={`c${index}-${line}`} wrap="truncate-end">
-                {row.map(piece => (
-                  <Text color={piece.color} dimColor={piece.dim === true}>
-                    {piece.text}
-                  </Text>
-                ))}
-              </Text>
-            ))}
+            {chartTree(els, chart, chartWidth, `c${index}`)}
           </Box>
         ))}
         {state.length > 0 && (

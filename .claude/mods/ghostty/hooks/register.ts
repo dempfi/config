@@ -5,6 +5,7 @@ import {
   type SessionRecord,
   describePane,
   findPane,
+  headline,
   isUnderTheUser,
   joinPanes,
   parsePs,
@@ -39,7 +40,7 @@ const TOOLS = [
       properties: {
         pane: PANE,
         scope: { type: 'string', enum: ['screen', 'scrollback'], description: 'screen when absent' },
-        lines: { type: 'number', description: 'How many of the last lines to return; 200 when absent' },
+        lines: { type: 'number', description: 'How many of the last lines to return; 60 when absent' },
       },
       required: ['pane'],
     },
@@ -191,11 +192,11 @@ async function serve($: EngineInterface, name: string, args: Record<string, unkn
 
   if (name === 'read') {
     const scope = args.scope === 'scrollback' ? 'scrollback' : 'screen'
-    const lines = typeof args.lines === 'number' && args.lines > 0 ? Math.floor(args.lines) : 200
+    const lines = typeof args.lines === 'number' && args.lines > 0 ? Math.floor(args.lines) : 60
     const { text } = (await helper($, { op: 'read', pane: pane.id, scope })) as { text: string }
     const kept = tail(text, lines)
-    const note = kept.dropped > 0 ? `[${kept.dropped} earlier lines not shown]\n` : ''
-    return reply(`${describePane(pane)}\n---\n${note}${kept.text}`)
+    const note = kept.dropped > 0 ? `[${kept.dropped} earlier lines]\n` : ''
+    return reply(`${headline(pane)}\n${note}${kept.text}`)
   }
 
   if (name === 'type' || name === 'key') {

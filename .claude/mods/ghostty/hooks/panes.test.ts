@@ -1,5 +1,49 @@
 import { expect, test } from 'claude-code/testing'
-import { type RawPane, findPane, isUnderTheUser, joinPanes, parsePs, showsPermissionDialog, tail } from './panes.ts'
+import { type RawPane, clean, findPane, isUnderTheUser, joinPanes, parsePs, showsPermissionDialog, tail } from './panes.ts'
+
+const WIDE = 130
+const row = (left: string, right = '') => left.padEnd(WIDE, ' ') + '│' + right
+
+test('a read cuts the docked sidebar off at its border and keeps the session text', async () => {
+  const screen = [
+    row('⏺ Tests pass (77). The scan is still running.', 'Claude 3/5'),
+    row('  next I write the report', '✓ Write tests'),
+    row('', '▶ Implement'),
+    row('', ''),
+    row('✻ Cogitated for 1m 21s', 'State'),
+  ].join('\n')
+  const text = clean(screen)
+  expect(text).toContain('Tests pass (77)')
+  expect(text).not.toContain('Claude 3/5')
+  expect(text).not.toContain('Write tests')
+  expect(text.split('\n').every(line => line === line.trimEnd())).toBe(true)
+})
+
+test('a read keeps a box-drawing bar that belongs to the content, such as a chart axis', async () => {
+  const text = clean(['  20 │█████', '     │███', '   0 │█'].join('\n'))
+  expect(text).toContain('20 │█████')
+})
+
+test('a read drops Claude Code chrome: dividers, the token counter, tips and the role strips', async () => {
+  const screen = [
+    '⏺ Done.',
+    '─'.repeat(80) + ' lantern-docs-review ─',
+    '❯ ',
+    '                    166740 tokens',
+    '  ⎿  Tip: Press shift+↑ to raise effort',
+    '                AUTOMATED · review  lantern-docs',
+  ].join('\n')
+  expect(clean(screen)).toBe('⏺ Done.\n❯')
+})
+
+test('an image on screen reads as one marker, not its placeholder cells', async () => {
+  const cell = '\u{10EEEE}̅̍'
+  const screen = ['  340 ' + cell.repeat(50), '      ' + cell.repeat(50), '      Oct 24        Nov 6'].join('\n')
+  const text = clean(screen)
+  expect(text).toContain('[image]')
+  expect(text).not.toContain('\u{10EEEE}')
+  expect(text.length).toBeLessThan(80)
+})
 
 test('a Claude permission dialog on screen is recognised', async () => {
   const dialog = [
