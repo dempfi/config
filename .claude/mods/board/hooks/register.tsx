@@ -1,15 +1,76 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
-import type { Board, Item } from '../types'
+import type { Board, ChartRequest, ChartSpec, Item } from '../types'
+import { CHART_KINDS, type Row, describe as describeChart, render as renderChart, validate as validateChart } from './chart.ts'
 import { ACTIONS, EMPTY, type Outcome, answer, apply, inSection, summary, userAdd, waiting } from './model.ts'
 
 const PANE = 'board'
 const TOOL = 'mcp__board__board' as const
+const CHART_TOOL = 'mcp__board__chart' as const
 const OPTION_KEYS = 'abcdef'
 const DONE_SHOWN = 4
+const PINNED_CHARTS = 4
 
 const boardAtom = atom({ plugin: 'board', key: 'board' } as const, EMPTY, { shape: 'board-1' })
 const expandedAtom = atom({ plugin: 'board', key: 'expanded' } as const, 0)
+const chartsAtom = atom({ plugin: 'board', key: 'charts' } as const, [], { shape: 'charts-1' })
+
+const CHART_DESCRIPTION = [
+  'Draws a chart inline in the transcript, where the user sees it under this call. Use it whenever numbers are easier seen than read: trends over time, comparisons, distributions, progress.',
+  '- kind: line (trends), scatter (x/y points), bar (compare a few values, grouped when there are several series), hbar (ranked labelled values), sparkline (one compact row per series).',
+  '- series: [{ name?, values: number[] }] or [{ name?, points: [[x, y], ...] }]; labels name the x positions (or the bars).',
+  '- pin: true also keeps the chart on the board; pinning again under the same title replaces it, so a chart can track live progress. unpin: true with the title removes it.',
+  'The result tells you the range of what was drawn; you do not see the picture.',
+].join('\n')
+
+const CHART_SCHEMA = {
+  type: 'object',
+  properties: {
+    kind: { type: 'string', enum: [...CHART_KINDS] },
+    title: { type: 'string' },
+    unit: { type: 'string' },
+    series: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          values: { type: 'array', items: { type: 'number' } },
+          points: { type: 'array', items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 } },
+        },
+      },
+    },
+    labels: { type: 'array', items: { type: 'string' } },
+    height: { type: 'number', description: 'Rows the plot takes, 3 to 30; 10 when absent' },
+    pin: { type: 'boolean' },
+    unpin: { type: 'boolean' },
+  },
+  required: ['kind', 'series'],
+}
+
+function specOf(request: ChartRequest): ChartSpec {
+  return {
+    kind: request.kind,
+    series: request.series,
+    ...(request.title ? { title: request.title } : {}),
+    ...(request.labels ? { labels: request.labels } : {}),
+    ...(request.unit ? { unit: request.unit } : {}),
+    ...(request.height ? { height: request.height } : {}),
+  }
+}
+
+async function chartsKey($: EngineInterface) {
+  return `charts:${String(await $.session.id())}`
+}
+
+async function pinChart($: EngineInterface, spec: ChartSpec, isUnpin: boolean) {
+  const charts = await update($, chartsAtom, current => {
+    const rest = (current ?? []).filter(one => (one.title ?? '') !== (spec.title ?? ''))
+    return isUnpin ? rest : [...rest, spec].slice(-PINNED_CHARTS)
+  })
+  await $.store.set(await chartsKey($), charts)
+  if (!isUnpin) await openPane($)
+}
 
 const DESCRIPTION = [
   'The board the user keeps beside this session: a live checklist of your work, the things you need from the user, and the settled state of the work. The user watches it, so keep it true.',
@@ -102,6 +163,9 @@ function runCommand(board: Board, args: string): Outcome | null {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.tool.register({ name: 'board', description: DESCRIPTION, inputSchema: SCHEMA, isDeferred: false })
+    await $.tool.register({ name: 'chart', description: CHART_DESCRIPTION, inputSchema: CHART_SCHEMA, isDeferred: false })
+    const savedCharts = (await $.store.get(await chartsKey($))) as ChartSpec[] | undefined
+    if (Array.isArray(savedCharts) && savedCharts.length > 0) await update($, chartsAtom, () => savedCharts)
     await $.command.register({
       name: 'board',
       description: 'Open the board, or add, note, tick off or remove an item',
@@ -125,6 +189,48 @@ export const register: Register = on => {
     ($, e, next) => next(e),
   )
 
+  on('tool.call', { tool: CHART_TOOL }, async ($, e) => {
+    if (!('kind' in e)) return { deny: 'a chart needs a kind and series' }
+    const spec = specOf(e)
+    if (e.unpin === true) {
+      await pinChart($, spec, true)
+      return { result: `Unpinned "${spec.title ?? ''}" from the board.` }
+    }
+    const problem = validateChart(spec)
+    if (problem) return { deny: problem }
+    if (e.pin === true) await pinChart($, spec, false)
+    return { result: describeChart(spec) + (e.pin === true ? ' Pinned to the board.' : '') }
+  }).catch(() => ({ deny: 'the chart failed' }))
+
+  on('tool.check', { tool: CHART_TOOL }, async () => ({ decision: 'allow', reason: 'A chart only draws.' })).catch(
+    ($, e, next) => next(e),
+  )
+
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    if (e.props.tool !== CHART_TOOL || e.props.isRunning || e.props.isErrored) return next(e)
+    const request = e.props.input as ChartRequest
+    if (request.unpin === true || validateChart(specOf(request))) return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    const theirs = await next(e)
+    const width = Math.min(120, Math.max(20, (e.viewport?.columns ?? 100) - 6))
+    return (
+      <Box flexDirection="column">
+        {theirs}
+        <Box flexDirection="column" paddingLeft={2} marginTop={1}>
+          {renderChart(specOf(request), width).map((row: Row, index: number) => (
+            <Text key={`r${index}`} wrap="truncate-end">
+              {row.map(piece => (
+                <Text color={piece.color} dimColor={piece.dim === true}>
+                  {piece.text}
+                </Text>
+              ))}
+            </Text>
+          ))}
+        </Box>
+      </Box>
+    )
+  })
+
   on('command.run', { command: 'board' }, async ($, e) => {
     const board = (await read($, boardAtom)) ?? EMPTY
     const step = runCommand(board, e.args)
@@ -141,6 +247,8 @@ export const register: Register = on => {
     const { Box, Text, Button, Markdown, Input } = $.ui.resolve(e)
     const board = (await read($, boardAtom)) ?? EMPTY
     const expanded = (await read($, expandedAtom)) ?? 0
+    const charts = (await read($, chartsAtom)) ?? []
+    const chartWidth = Math.max(20, e.props.bodyColumns - 1)
 
     const claude = inSection(board, 'claude')
     const finished = claude.filter(item => item.status === 'done')
@@ -232,6 +340,19 @@ export const register: Register = on => {
             </Text>
           ))}
         </Box>
+        {charts.map((chart, index) => (
+          <Box key={`c${index}`} flexDirection="column">
+            {renderChart(chart, chartWidth).map((row: Row, line: number) => (
+              <Text key={`c${index}-${line}`} wrap="truncate-end">
+                {row.map(piece => (
+                  <Text color={piece.color} dimColor={piece.dim === true}>
+                    {piece.text}
+                  </Text>
+                ))}
+              </Text>
+            ))}
+          </Box>
+        ))}
         {state.length > 0 && (
           <Box flexDirection="column">
             <Text bold>State</Text>

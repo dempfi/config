@@ -28,11 +28,31 @@ export type BoardRequest = {
   id?: number
 }
 
+export type ChartKind = 'line' | 'scatter' | 'bar' | 'hbar' | 'sparkline'
+
+export type ChartSeries = {
+  name?: string
+  values?: number[]
+  points?: [number, number][]
+}
+
+export type ChartSpec = {
+  kind: ChartKind
+  title?: string
+  series: ChartSeries[]
+  labels?: string[]
+  unit?: string
+  height?: number
+}
+
+export type ChartRequest = ChartSpec & { pin?: boolean; unpin?: boolean }
+
 declare module 'claude-code' {
   interface PluginState {
-    board: { board: Shaped<Board>; expanded: number }
+    board: { board: Shaped<Board>; expanded: number; charts: Shaped<ChartSpec[]> }
   }
   interface McpToolInputs {
     mcp__board__board: BoardRequest
+    mcp__board__chart: ChartRequest
   }
 }
