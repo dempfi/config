@@ -167,7 +167,7 @@ gh auth status >/dev/null 2>&1 || gh auth login --hostname github.com --git-prot
 mkdir -p "$HOME/.claude" "$HOME/.codex"
 cp "$HOME/temp/.claude/RTK.md" "$HOME/temp/.claude/statusline-command.sh" "$HOME/.claude/"
 sed "s|/Users/dempfi|$HOME|g" "$HOME/temp/.claude/CLAUDE.md" > "$HOME/.claude/CLAUDE.md"
-cp -R "$HOME/temp/.claude/hooks" "$HOME/temp/.claude/rules" "$HOME/temp/.claude/marketplaces" "$HOME/temp/.claude/mods" "$HOME/.claude/"
+cp -R "$HOME/temp/.claude/hooks" "$HOME/temp/.claude/rules" "$HOME/temp/.claude/marketplaces" "$HOME/temp/.claude/mods" "$HOME/temp/.claude/themes" "$HOME/.claude/"
 cp "$HOME/temp/.codex/RTK.md" "$HOME/.codex/"
 sed "s|/Users/dempfi|$HOME|g" "$HOME/temp/.codex/AGENTS.md" > "$HOME/.codex/AGENTS.md"
 

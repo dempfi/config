@@ -231,7 +231,7 @@
   "autoMemoryEnabled": false,
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
-  "theme": "auto",
+  "theme": "custom:ayu-mirage",
   "editorMode": "normal",
   "verbose": true,
   "switchModelsOnFlag": true,

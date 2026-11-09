@@ -25,7 +25,8 @@ Or run locally:
 ### Configuration Structure
 
 - `.config/` - XDG-style configs symlinked to `~/.config/`
-- `.claude/` - Claude Code agent layer: settings, hooks, and rules (see below)
+- `.claude/` - Claude Code agent layer: settings, hooks, and rules (see below), plus the Ayu
+  Light, Mirage and Dark themes in `.claude/themes/`, matching the Ghostty palette
 - `.codex/` - Codex instruction files, copied to `~/.codex/`
 - `font/` - Custom Iosevka TTF fonts (copied to `~/Library/Fonts/`)
 - `.config/ghostty/config` - Ghostty settings; the Ayu themes it names ship with Ghostty. Xcode themes are installed from [ayu-theme/ayu-xcode](https://github.com/ayu-theme/ayu-xcode)
