@@ -1,0 +1,6 @@
+{
+  "name": "inline-files",
+  "version": "0.1.0",
+  "description": "Previews the text files a reply names inline in the transcript, each with controls to expand it or open it in VS Code",
+  "types": "./types/index.d.ts"
+}

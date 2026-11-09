@@ -84,6 +84,8 @@ parse. Changing that means the guard silently stops guarding.
   needed for, and they depend on Ghostty:
   - **inline-images** draws every image an answer names (an absolute path or a `file://` link) and
     every image a Read call opens, inline under the message, through Ghostty's image protocol.
+  - **inline-files** previews the text files an answer names inline in the transcript, each with
+    controls to expand it or open it in VS Code.
   - **ghostty** gives Claude tools to list Ghostty panes, each matched to the Claude session
     running in it, read a pane's screen or scrollback, type and press keys in it, open splits,
     tabs and windows, focus and close panes. Typing is refused in the pane Claude runs in and in
